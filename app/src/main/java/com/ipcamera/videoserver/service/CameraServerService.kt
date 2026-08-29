@@ -102,14 +102,21 @@ class CameraServerService : LifecycleService() {
         archiveJobs[source]?.cancel()
         archiveJobs[source] = lifecycleScope.launch {
             while (true) {
+                var recorder: SegmentRecorder? = null
                 runCatching {
                     val outputFile = archiveManager.segmentFileName(source)
-                    val recorder = SegmentRecorder(this@CameraServerService, source, outputFile)
-                    val surface = recorder.prepare()
-                    recorder.start()
+                    recorder = SegmentRecorder(this@CameraServerService, source, outputFile)
+                    val surface = recorder!!.prepare()
+                    // Register the recorder surface with Camera2 so frames are actually written
+                    cameraStreamManager.setRecordingSurface(source, surface)
+                    recorder!!.start()
                     delay(30 * 60 * 1000L)
-                    recorder.stop()
+                    recorder!!.stop()
+                    cameraStreamManager.setRecordingSurface(source, null)
                     archiveManager.enforceRotation()
+                }.onFailure {
+                    runCatching { recorder?.stop() }
+                    cameraStreamManager.setRecordingSurface(source, null)
                 }
                 delay(5_000L)
             }

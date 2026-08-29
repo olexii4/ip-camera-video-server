@@ -6,6 +6,7 @@ import android.hardware.camera2.*
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
+import android.view.Surface
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -25,8 +26,18 @@ class CameraStreamManager @Inject constructor(
     private val handler = Handler(handlerThread.looper)
     private val scope = CoroutineScope(SupervisorJob())
 
+    // extraSurfaces are additional targets (e.g. MediaRecorder surface) added to the Camera2 session
+    private val extraSurfaces = ConcurrentHashMap<CameraSource, Surface>()
+
     fun getStream(source: CameraSource): SharedFlow<ByteArray> =
         activeStreams.getOrPut(source) { buildStream(source) }
+
+    fun setRecordingSurface(source: CameraSource, surface: Surface?) {
+        if (surface != null) extraSurfaces[source] = surface
+        else extraSurfaces.remove(source)
+        // Invalidate the active stream so it rebuilds with the new surface set
+        activeStreams.remove(source)
+    }
 
     private fun buildStream(source: CameraSource): SharedFlow<ByteArray> =
         callbackFlow<ByteArray> {
@@ -44,6 +55,11 @@ class CameraStreamManager @Inject constructor(
                 }
             }, handler)
 
+            val surfaces = buildList {
+                add(imageReader.surface)
+                extraSurfaces[source]?.let { add(it) }
+            }
+
             var captureSession: CameraCaptureSession? = null
             var cameraDevice: CameraDevice? = null
 
@@ -52,13 +68,13 @@ class CameraStreamManager @Inject constructor(
                     cameraDevice = camera
                     @Suppress("DEPRECATION")
                     camera.createCaptureSession(
-                        listOf(imageReader.surface),
+                        surfaces,
                         object : CameraCaptureSession.StateCallback() {
                             override fun onConfigured(session: CameraCaptureSession) {
                                 captureSession = session
                                 val request = camera
-                                    .createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-                                    .apply { addTarget(imageReader.surface) }
+                                    .createCaptureRequest(CameraDevice.TEMPLATE_RECORD)
+                                    .apply { surfaces.forEach { addTarget(it) } }
                                     .build()
                                 session.setRepeatingRequest(request, null, handler)
                             }

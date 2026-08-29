@@ -152,45 +152,46 @@ private val WEB_UI_HTML = """
 <style>
 *{box-sizing:border-box}
 body{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;margin:0;padding:0}
-header{background:#161b22;border-bottom:1px solid #30363d;padding:14px 20px;display:flex;align-items:center;gap:12px}
-header h1{margin:0;font-size:1.1rem}
+header{background:#161b22;border-bottom:1px solid #30363d;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+header h1{margin:0;font-size:1rem;white-space:nowrap}
 nav{display:flex;gap:4px;margin-left:auto}
-nav button{background:none;border:1px solid #30363d;color:#8b949e;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:.85rem}
+nav button{background:none;border:1px solid #30363d;color:#8b949e;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:.82rem}
 nav button.active{background:#238636;color:#fff;border-color:#238636}
-.page{display:none;padding:20px}
+.page{display:none;padding:16px}
 .page.active{display:block}
 /* Login */
-#loginPage{max-width:360px;margin:60px auto}
-.card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:24px}
-label{display:block;font-size:.85rem;color:#8b949e;margin-bottom:4px}
-input[type=text],input[type=password]{width:100%;padding:9px 12px;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:.95rem;margin-bottom:14px}
-.btn{display:inline-block;padding:9px 18px;background:#238636;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.9rem}
+#loginPage{max-width:340px;margin:50px auto}
+.card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:22px}
+label{display:block;font-size:.82rem;color:#8b949e;margin-bottom:3px}
+input[type=text],input[type=password]{width:100%;padding:9px 11px;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:.92rem;margin-bottom:12px}
+.btn{display:inline-flex;align-items:center;gap:4px;padding:7px 14px;background:#238636;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;text-decoration:none}
 .btn:hover{background:#2ea043}
 .btn.danger{background:#b91c1c}.btn.danger:hover{background:#991b1b}
-.btn.secondary{background:#21262d;border:1px solid #30363d}.btn.secondary:hover{background:#30363d}
-#loginErr{color:#f85149;font-size:.85rem;margin-top:8px}
-/* Cameras */
-#camGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
-.cam-box h3{margin:0 0 8px;font-size:.8rem;color:#8b949e;text-transform:uppercase;letter-spacing:.06em}
-.cam-box img{width:100%;border-radius:8px;background:#161b22;display:block;min-height:160px}
-.cam-box .err{color:#f85149;font-size:.8rem;margin-top:6px;display:none}
+.btn.secondary{background:#21262d;border:1px solid #30363d;color:#e6edf3}.btn.secondary:hover{background:#30363d}
+#loginErr{color:#f85149;font-size:.82rem;margin-top:8px}
+/* Camera — single view with selector */
+#camToolbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+#camToolbar label{font-size:.82rem;color:#8b949e;margin:0}
+#srcSelect{background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:6px;padding:5px 10px;font-size:.85rem}
+#camWrap{position:relative;background:#161b22;border-radius:8px;overflow:hidden;line-height:0}
+#camWrap img{width:100%;display:block;min-height:200px}
+#camErr{display:none;position:absolute;inset:0;background:#0d1117dd;display:flex;align-items:center;justify-content:center;color:#f85149;font-size:.9rem}
 /* Files */
 #fileList{border:1px solid #30363d;border-radius:8px;overflow:hidden}
-.file-row{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid #21262d;gap:8px}
+.file-row{display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid #21262d;gap:6px;flex-wrap:wrap}
 .file-row:last-child{border-bottom:none}
-.file-row:hover{background:#161b22}
-.fname{flex:1;font-size:.9rem;word-break:break-all}
-.fsize{font-size:.8rem;color:#8b949e;white-space:nowrap;margin-right:8px}
-.fdate{font-size:.75rem;color:#6e7681;white-space:nowrap;margin-right:8px}
-#fileTools{display:flex;gap:8px;margin-bottom:14px}
-#emptyMsg{padding:24px;text-align:center;color:#6e7681;font-size:.9rem}
+.fname{flex:1;font-size:.85rem;word-break:break-all;min-width:120px}
+.fmeta{font-size:.75rem;color:#8b949e;white-space:nowrap}
+.factions{display:flex;gap:6px;flex-shrink:0}
+#fileTools{display:flex;gap:8px;margin-bottom:12px}
+.empty{padding:24px;text-align:center;color:#6e7681;font-size:.88rem}
 </style>
 </head>
 <body>
-<!-- LOGIN -->
+
 <div id="loginPage" class="page active">
   <div class="card">
-    <h2 style="margin-top:0">📷 IP Camera Server</h2>
+    <h2 style="margin-top:0;font-size:1.1rem">📷 IP Camera Server</h2>
     <label>Username</label>
     <input id="user" type="text" value="admin" autocomplete="username">
     <label>Password</label>
@@ -200,7 +201,6 @@ input[type=text],input[type=password]{width:100%;padding:9px 12px;background:#0d
   </div>
 </div>
 
-<!-- MAIN APP -->
 <div id="app" style="display:none">
   <header>
     <h1>📷 IP Camera</h1>
@@ -210,27 +210,32 @@ input[type=text],input[type=password]{width:100%;padding:9px 12px;background:#0d
     </nav>
   </header>
 
-  <!-- Cameras tab -->
   <div id="cameras" class="page active">
-    <div id="camGrid"></div>
+    <div id="camToolbar">
+      <label for="srcSelect">Source:</label>
+      <select id="srcSelect" onchange="switchCamera()"></select>
+    </div>
+    <div id="camWrap">
+      <img id="camImg" alt="camera stream">
+      <div id="camErr" style="display:none">⚠ Stream unavailable — device may only support one camera at a time</div>
+    </div>
   </div>
 
-  <!-- Files tab -->
   <div id="files" class="page">
     <div id="fileTools">
       <button class="btn secondary" onclick="loadFiles()">↻ Refresh</button>
     </div>
-    <div id="fileList"><div id="emptyMsg">Loading…</div></div>
+    <div id="fileList"><div class="empty">Loading…</div></div>
   </div>
 </div>
 
 <script>
-let TOKEN = '';
+let TOKEN = '', SOURCES = [];
 
 async function login() {
   const err = document.getElementById('loginErr');
   err.textContent = '';
-  const body = new URLSearchParams({username: document.getElementById('user').value, password: document.getElementById('pass').value});
+  const body = new URLSearchParams({username:document.getElementById('user').value, password:document.getElementById('pass').value});
   const r = await fetch('/oauth/token', {method:'POST', body});
   if (!r.ok) { err.textContent = 'Invalid credentials'; return; }
   TOKEN = (await r.json()).access_token;
@@ -241,43 +246,50 @@ async function login() {
 
 async function loadCameras() {
   const r = await fetch('/cameras', {headers:{Authorization:'Bearer '+TOKEN}});
-  const sources = r.ok ? await r.json() : ['main','front'];
-  const grid = document.getElementById('camGrid');
-  grid.innerHTML = '';
-  sources.forEach(src => {
-    const box = document.createElement('div');
-    box.className = 'cam-box';
-    const url = '/stream/' + src + '?token=' + TOKEN;
-    box.innerHTML = '<h3>' + src + ' camera</h3><img src="' + url + '" alt="' + src + '" onerror="this.nextElementSibling.style.display=\'block\'"><div class="err">⚠ Stream unavailable</div>';
-    grid.appendChild(box);
-  });
+  SOURCES = r.ok ? await r.json() : ['main'];
+  const sel = document.getElementById('srcSelect');
+  sel.innerHTML = SOURCES.map(s => '<option value="'+s+'">'+s.charAt(0).toUpperCase()+s.slice(1)+' camera</option>').join('');
+  switchCamera();
+}
+
+function switchCamera() {
+  const src = document.getElementById('srcSelect').value;
+  const img = document.getElementById('camImg');
+  const errDiv = document.getElementById('camErr');
+  errDiv.style.display = 'none';
+  img.style.display = 'block';
+  img.src = '/stream/' + src + '?token=' + TOKEN;
+  img.onerror = () => {
+    img.style.display = 'none';
+    errDiv.style.display = 'flex';
+  };
 }
 
 async function loadFiles() {
   const list = document.getElementById('fileList');
-  list.innerHTML = '<div id="emptyMsg">Loading…</div>';
+  list.innerHTML = '<div class="empty">Loading…</div>';
   const r = await fetch('/files', {headers:{Authorization:'Bearer '+TOKEN}});
-  if (!r.ok) { list.innerHTML = '<div id="emptyMsg">Error loading files</div>'; return; }
+  if (!r.ok) { list.innerHTML = '<div class="empty">Error loading files</div>'; return; }
   const files = await r.json();
-  if (!files.length) { list.innerHTML = '<div id="emptyMsg">No recordings yet</div>'; return; }
+  if (!files.length) { list.innerHTML = '<div class="empty">No recordings yet.<br>Enable archive in Settings to start recording.</div>'; return; }
   list.innerHTML = files.map(f => {
     const mb = (f.size/1048576).toFixed(1);
     const date = new Date(f.modified).toLocaleString();
+    const safeName = encodeURIComponent(f.name);
     return '<div class="file-row">'
-      + '<span class="fname">' + f.name + '</span>'
-      + '<span class="fsize">' + mb + ' MB</span>'
-      + '<span class="fdate">' + date + '</span>'
-      + '<a class="btn" href="/files/download/' + f.name + '?token=' + TOKEN + '" download="' + f.name + '">⬇</a>'
-      + '<button class="btn danger" onclick="deleteFile(\'' + f.name + '\')">🗑</button>'
-      + '</div>';
+      + '<span class="fname">'+f.name+'</span>'
+      + '<span class="fmeta">'+mb+' MB &nbsp;'+date+'</span>'
+      + '<span class="factions">'
+      + '<a class="btn" href="/files/download/'+safeName+'?token='+TOKEN+'" download="'+f.name+'">⬇ Download</a>'
+      + '<button class="btn danger" onclick="deleteFile(\''+f.name+'\')">🗑</button>'
+      + '</span></div>';
   }).join('');
 }
 
 async function deleteFile(name) {
   if (!confirm('Delete ' + name + '?')) return;
-  const r = await fetch('/files/delete/' + name, {method:'POST', headers:{Authorization:'Bearer '+TOKEN}});
-  if (r.ok) loadFiles();
-  else alert('Delete failed');
+  const r = await fetch('/files/delete/' + encodeURIComponent(name), {method:'POST', headers:{Authorization:'Bearer '+TOKEN}});
+  if (r.ok) loadFiles(); else alert('Delete failed');
 }
 
 function showTab(id, btn) {
@@ -288,7 +300,7 @@ function showTab(id, btn) {
   if (id === 'files') loadFiles();
 }
 
-document.addEventListener('keydown', e => { if(e.key==='Enter' && document.getElementById('loginPage').style.display!=='none') login(); });
+document.addEventListener('keydown', e => { if(e.key==='Enter' && !document.getElementById('loginPage').style.display) login(); });
 </script>
 </body>
 </html>
