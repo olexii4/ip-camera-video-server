@@ -18,6 +18,7 @@ class AuthManager @Inject constructor() {
     @Volatile private var secret: String = ""
     @Volatile private var usernameStored: String = ""
     @Volatile private var passwordHash: String = ""
+    @Volatile var authRequired: Boolean = true
 
     fun configure(secret: String) {
         this.secret = secret

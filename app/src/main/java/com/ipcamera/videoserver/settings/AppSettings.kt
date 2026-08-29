@@ -17,6 +17,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
 
     private object Keys {
         val SERVER_PORT = intPreferencesKey("server_port")
+        val AUTH_ENABLED = booleanPreferencesKey("auth_enabled")
         val ADMIN_USERNAME = stringPreferencesKey("admin_username")
         val ADMIN_PASSWORD_HASH = stringPreferencesKey("admin_password_hash")
         val ADMIN_PASSWORD_PLAIN = stringPreferencesKey("admin_password_plain")
@@ -37,6 +38,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
     }
 
     val serverPort: Flow<Int> = context.dataStore.data.map { it[Keys.SERVER_PORT] ?: 8080 }
+    val authEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.AUTH_ENABLED] ?: true }
     val adminUsername: Flow<String> = context.dataStore.data.map { it[Keys.ADMIN_USERNAME] ?: "admin" }
     val adminPasswordHash: Flow<String> = context.dataStore.data.map { it[Keys.ADMIN_PASSWORD_HASH] ?: "" }
     val adminPasswordPlain: Flow<String> = context.dataStore.data.map { it[Keys.ADMIN_PASSWORD_PLAIN] ?: "admin" }
@@ -56,6 +58,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
     val serverStartedOnBoot: Flow<Boolean> = context.dataStore.data.map { it[Keys.SERVER_STARTED_ON_BOOT] ?: false }
 
     suspend fun setServerPort(port: Int) = context.dataStore.edit { it[Keys.SERVER_PORT] = port }
+    suspend fun setAuthEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.AUTH_ENABLED] = enabled }
     suspend fun setAdminUsername(name: String) = context.dataStore.edit { it[Keys.ADMIN_USERNAME] = name }
     suspend fun setAdminPasswordHash(hash: String) = context.dataStore.edit { it[Keys.ADMIN_PASSWORD_HASH] = hash }
     suspend fun setAdminPasswordPlain(plain: String) = context.dataStore.edit { it[Keys.ADMIN_PASSWORD_PLAIN] = plain }

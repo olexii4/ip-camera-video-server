@@ -67,6 +67,7 @@ class CameraServerService : LifecycleService() {
                 UUID.randomUUID().toString().also { settings.setJwtSecret(it) }
             }
             authManager.configure(jwtSecret)
+            authManager.authRequired = settings.authEnabled.first()
 
             var hash = settings.adminPasswordHash.first()
             val plainPassword = if (hash.isEmpty()) {

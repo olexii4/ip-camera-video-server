@@ -19,6 +19,8 @@ fun SettingsScreen(vm: AppViewModel) {
 
     // Read current persisted values once as initial state
     val serverPort by vm.settings.serverPort.collectAsState(initial = 8080)
+    val authEnabled by vm.settings.authEnabled.collectAsState(initial = true)
+    val adminUsername by vm.settings.adminUsername.collectAsState(initial = "admin")
     val smsNumber by vm.settings.smsTargetNumber.collectAsState(initial = "")
     val archiveMaxFiles by vm.settings.archiveMaxFiles.collectAsState(initial = 1440)
     val archiveMaxSizeGb by vm.settings.archiveMaxSizeGb.collectAsState(initial = 30)
@@ -32,6 +34,7 @@ fun SettingsScreen(vm: AppViewModel) {
 
     // Local draft state for fields that need explicit Save
     var draftPort by remember(serverPort) { mutableStateOf(serverPort.toString()) }
+    var draftUsername by remember(adminUsername) { mutableStateOf(adminUsername) }
     var draftPassword by remember { mutableStateOf("") }
     var draftSms by remember(smsNumber) { mutableStateOf(smsNumber) }
     var draftMaxFiles by remember(archiveMaxFiles) { mutableStateOf(archiveMaxFiles.toString()) }
@@ -52,18 +55,33 @@ fun SettingsScreen(vm: AppViewModel) {
 
         SectionHeader("Web Server")
         DraftTextField("Port", draftPort, KeyboardType.Number) { draftPort = it }
-        DraftTextField("SMS notification number", draftSms, KeyboardType.Phone) { draftSms = it }
         LabeledSwitch("Start on boot", startOnBoot) {
             scope.launch { vm.settings.setServerStartedOnBoot(it) }
         }
 
-        SectionHeader("Change Password")
-        DraftTextField(
-            "New password (leave blank to keep current)",
-            draftPassword,
-            KeyboardType.Password,
-            visualTransformation = true,
-        ) { draftPassword = it }
+        SectionHeader("Access control")
+        LabeledSwitch("Require login", authEnabled) {
+            scope.launch { vm.settings.setAuthEnabled(it) }
+        }
+        if (!authEnabled) {
+            Text(
+                "⚠ Anyone on the network can view cameras without a password.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (authEnabled) {
+            DraftTextField("Username", draftUsername, KeyboardType.Text) { draftUsername = it }
+            DraftTextField(
+                "Password (leave blank to keep current)",
+                draftPassword,
+                KeyboardType.Password,
+                visualTransformation = true,
+            ) { draftPassword = it }
+        }
+
+        SectionHeader("SMS notification")
+        DraftTextField("Target phone number", draftSms, KeyboardType.Phone) { draftSms = it }
 
         SectionHeader("Archive")
         LabeledSwitch("Record main camera", archiveEnabledMain) {
@@ -117,6 +135,7 @@ fun SettingsScreen(vm: AppViewModel) {
                     draftMaxSizeGb.toIntOrNull()?.let { vm.settings.setArchiveMaxSizeGb(it) }
                     draftFtpPort.toIntOrNull()?.let { vm.settings.setFtpPort(it) }
                     draftFtpsPort.toIntOrNull()?.let { vm.settings.setFtpsPort(it) }
+                    if (draftUsername.isNotBlank()) vm.settings.setAdminUsername(draftUsername)
                     if (draftPassword.isNotEmpty()) {
                         val hash = vm.hashPassword(draftPassword)
                         vm.settings.setAdminPasswordHash(hash)

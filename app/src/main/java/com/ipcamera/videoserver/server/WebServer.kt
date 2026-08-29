@@ -40,6 +40,14 @@ class WebServer @Inject constructor(
 
                 get("/") { call.respondText(WEB_UI_HTML, ContentType.Text.Html) }
 
+                // Tells the web UI whether login is required
+                get("/auth-config") {
+                    call.respondText(
+                        """{"authRequired":${authManager.authRequired}}""",
+                        ContentType.Application.Json,
+                    )
+                }
+
                 post("/oauth/token") {
                     val params = call.receiveParameters()
                     val username = params["username"]
@@ -125,6 +133,7 @@ class WebServer @Inject constructor(
     }
 
     private suspend fun requireAuth(call: ApplicationCall): Unit? {
+        if (!authManager.authRequired) return Unit
         val bearer = extractBearer(call) ?: call.request.queryParameters["token"]
         if (bearer == null || authManager.validateToken(bearer) == null) {
             call.respond(HttpStatusCode.Unauthorized)
@@ -242,6 +251,11 @@ input[type=text],input[type=password]{width:100%;padding:9px 11px;background:#0d
 <script>
 let TOKEN = '', SOURCES = [];
 
+window.addEventListener('DOMContentLoaded', async () => {
+  const cfg = await fetch('/auth-config').then(r => r.json()).catch(() => ({authRequired:true}));
+  if (!cfg.authRequired) { enterApp(); }
+});
+
 async function login() {
   const err = document.getElementById('loginErr');
   err.textContent = '';
@@ -249,9 +263,13 @@ async function login() {
   const r = await fetch('/oauth/token', {method:'POST', body});
   if (!r.ok) { err.textContent = 'Invalid credentials'; return; }
   TOKEN = (await r.json()).access_token;
+  enterApp();
+}
+
+function enterApp() {
   document.getElementById('loginPage').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-  await loadCameras();
+  loadCameras();
 }
 
 async function loadCameras() {
