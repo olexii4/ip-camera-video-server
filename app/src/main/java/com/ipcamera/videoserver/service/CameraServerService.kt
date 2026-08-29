@@ -125,7 +125,7 @@ class CameraServerService : LifecycleService() {
                     recorder!!.start()
                     // Record for 30 min or until nobody is watching
                     var elapsed = 0L
-                    while (elapsed < 30 * 60 * 1000L && cameraStreamManager.isStreaming(source)) {
+                    while (elapsed < 15 * 60 * 1000L && cameraStreamManager.isStreaming(source)) {
                         delay(5_000L)
                         elapsed += 5_000L
                     }

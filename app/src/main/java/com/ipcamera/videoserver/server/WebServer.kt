@@ -285,14 +285,28 @@ input:focus{border-color:var(--accent)}
 }
 .cam-expbtn:hover{background:rgba(255,255,255,.1);color:#fff}
 .cam-expbtn svg{width:10px;height:10px}
+.cam-playbtn{
+  display:flex;align-items:center;gap:4px;background:var(--accent);border:none;
+  color:#fff;border-radius:5px;padding:3px 10px;cursor:pointer;
+  font-size:.68rem;font-weight:500;transition:all .15s;
+}
+.cam-playbtn:hover{background:#2563eb}
+.cam-playbtn.stop{background:rgba(239,68,68,.8)}.cam-playbtn.stop:hover{background:#ef4444}
+.cam-playbtn svg{width:10px;height:10px}
 .cam-frame{width:350px;height:200px;display:block;object-fit:cover;background:#050810;}
 .cam-placeholder{
   width:350px;height:200px;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:8px;
+  align-items:center;justify-content:center;gap:10px;
   background:#050810;color:var(--muted);
 }
 .cam-placeholder svg{opacity:.35}
 .cam-placeholder span{font-size:.8rem;text-align:center;padding:0 16px}
+.cam-placeholder .play-hint{
+  display:flex;align-items:center;gap:6px;background:rgba(59,130,246,.15);
+  border:1px solid rgba(59,130,246,.3);color:var(--accent);
+  border-radius:20px;padding:5px 14px;font-size:.78rem;cursor:pointer;transition:all .15s;
+}
+.cam-placeholder .play-hint:hover{background:rgba(59,130,246,.25)}
 .cam-spinner{
   width:28px;height:28px;border:2px solid var(--border2);border-top-color:var(--accent);
   border-radius:50%;animation:spin .7s linear infinite;
@@ -453,8 +467,7 @@ async function loadCameras(){
   const r=await fetch('/cameras',{headers:authHeader()});
   SOURCES=r.ok?await r.json():['main'];
   renderGrid();
-  // Auto-activate first available camera
-  if(SOURCES.length>0) activateCamera(SOURCES[0]);
+  // All cameras start in OFF state — user presses Play to start
 }
 
 var SVG_EXPAND='<svg viewBox="0 0 448 512" fill="currentColor"><path d="M0 180V56c0-13.3 10.7-24 24-24h124c6.6 0 12 5.4 12 12v40c0 6.6-5.4 12-12 12H64v84c0 6.6-5.4 12-12 12H12c-6.6 0-12-5.4-12-12zM288 44v40c0 6.6 5.4 12 12 12h84v84c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12V56c0-13.3-10.7-24-24-24H300c-6.6 0-12 5.4-12 12zm148 276h-40c-6.6 0-12 5.4-12 12v84h-84c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h124c13.3 0 24-10.7 24-24V332c0-6.6-5.4-12-12-12zM160 468v-40c0-6.6-5.4-12-12-12H64v-84c0-6.6-5.4-12-12-12H12c-6.6 0-12 5.4-12 12v124c0 13.3 10.7 24 24 24h124c6.6 0 12-5.4 12-12z"/></svg>';
@@ -464,37 +477,91 @@ var ALL_SOURCES = ['main','front','usb'];
 
 function renderGrid(){
   const grid=document.getElementById('camGrid');
+  var SVG_PLAY='<svg viewBox="0 0 384 512" fill="currentColor"><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg>';
+  var SVG_STOP='<svg viewBox="0 0 384 512" fill="currentColor"><path d="M0 128C0 92.7 28.7 64 64 64H320c35.3 0 64 28.7 64 64V384c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V128z"/></svg>';
   grid.innerHTML=ALL_SOURCES.map(function(src){
     const label=src.charAt(0).toUpperCase()+src.slice(1)+' camera';
     const avail=SOURCES.indexOf(src)>=0;
-    const badge=avail?'<span class="cam-badge off" id="badge_'+src+'">Inactive</span>'
-                     :'<span class="cam-badge usb" id="badge_'+src+'">Not connected</span>';
-    return '<div class="cam-tile" id="tile_'+src+'" onclick="handleTileClick(\''+src+'\')">'
-      +'<div class="cam-header">'
-      +'<span class="cam-name">'+label+'</span>'
-      +badge
-      +'<button class="cam-expbtn" id="expbtn_'+src+'" style="display:none" onclick="event.stopPropagation();openPanel(\''+src+'\')">'
-      +SVG_EXPAND+'<span>Expand</span></button>'
-      +'</div>'
-      +'<div class="cam-placeholder" id="ph_'+src+'">'
+    const badge=avail?'<span class="cam-badge off" id="badge_'+src+'">Off</span>'
+                     :'<span class="cam-badge usb" id="badge_'+src+'">No device</span>';
+    const playBtn=avail
+      ?'<button class="cam-playbtn" id="playbtn_'+src+'" onclick="event.stopPropagation();toggleStream(\''+src+'\')">'
+        +SVG_PLAY+'<span id="playbtnlabel_'+src+'">Play</span></button>'
+      :'';
+    const expBtn='<button class="cam-expbtn" id="expbtn_'+src+'" style="display:none" onclick="event.stopPropagation();openPanel(\''+src+'\')">'
+      +SVG_EXPAND+'<span>Expand</span></button>';
+    const placeholder='<div class="cam-placeholder" id="ph_'+src+'">'
       +'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">'
       +(avail
         ?'<path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>'
         :'<path d="M23 7l-7 5 7 5V7z" opacity=".3"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2" opacity=".3"/><line x1="1" y1="1" x2="23" y2="23" stroke-width="2"/>'
       )
       +'</svg>'
-      +(avail?'<span>Click to view</span>':'<span>No USB camera connected</span>')
+      +(avail
+        ?'<div class="play-hint" onclick="event.stopPropagation();toggleStream(\''+src+'\')">'
+          +SVG_PLAY+'<span>Play</span></div>'
+        :'<span>No USB camera connected</span>'
+      )
+      +'</div>';
+    return '<div class="cam-tile" id="tile_'+src+'">'
+      +'<div class="cam-header">'
+      +'<span class="cam-name">'+label+'</span>'
+      +badge
+      +'<div style="display:flex;gap:4px">'
+      +playBtn
+      +expBtn
       +'</div>'
+      +'</div>'
+      +placeholder
       +'<img class="cam-frame" id="img_'+src+'" style="display:none" alt="'+src+'">'
       +'</div>';
   }).join('');
 }
 
-function handleTileClick(src){
+function toggleStream(src){
   if(switching) return;
-  if(SOURCES.indexOf(src)<0) return; // unavailable (USB not connected)
-  if(src!==activeSource) activateCamera(src);
+  if(SOURCES.indexOf(src)<0) return;
+  if(src===activeSource) stopStream();
+  else activateCamera(src);
 }
+
+function stopStream(){
+  if(!activeSource) return;
+  const src=activeSource;
+  const img=document.getElementById('img_'+src);
+  img.src=''; img.style.display='none';
+  const ph=document.getElementById('ph_'+src);
+  ph.style.display='flex';
+  ph.innerHTML='<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">'
+    +'<path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>'
+    +'</svg><div class="play-hint" onclick="event.stopPropagation();toggleStream(\''+src+'\')">'
+    +SVG_PLAY+'<span>Play</span></div>';
+  setBadge(src,'off','Off');
+  setPlayBtn(src,false);
+  document.getElementById('expbtn_'+src).style.display='none';
+  document.getElementById('tile_'+src).classList.remove('active');
+  if(expandedSource===src) compressPanel();
+  document.getElementById('liveDot').classList.add('off');
+  activeSource=null;
+}
+
+var SVG_PLAY='<svg viewBox="0 0 384 512" fill="currentColor"><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg>';
+var SVG_STOP_SM='<svg viewBox="0 0 384 512" fill="currentColor"><path d="M0 128C0 92.7 28.7 64 64 64H320c35.3 0 64 28.7 64 64V384c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V128z"/></svg>';
+
+function setPlayBtn(src,playing){
+  const btn=document.getElementById('playbtn_'+src);
+  const lbl=document.getElementById('playbtnlabel_'+src);
+  if(!btn) return;
+  if(playing){
+    btn.className='cam-playbtn stop';
+    btn.innerHTML=SVG_STOP_SM+'<span id="playbtnlabel_'+src+'">Stop</span>';
+  } else {
+    btn.className='cam-playbtn';
+    btn.innerHTML=SVG_PLAY+'<span id="playbtnlabel_'+src+'">Play</span>';
+  }
+}
+
+function handleTileClick(src){}
 
 async function activateCamera(src){
   if(switching) return;
@@ -502,19 +569,20 @@ async function activateCamera(src){
 
   // Stop old stream
   if(activeSource){
-    const oldImg=document.getElementById('img_'+activeSource);
+    const prev=activeSource;
+    const oldImg=document.getElementById('img_'+prev);
     oldImg.src=''; oldImg.style.display='none';
-    document.getElementById('ph_'+activeSource).style.display='flex';
-    document.getElementById('ph_'+activeSource).innerHTML=
-      '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">'
+    const prevPh=document.getElementById('ph_'+prev);
+    prevPh.style.display='flex';
+    prevPh.innerHTML='<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">'
       +'<path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>'
-      +'</svg><span>Click to view</span>';
-    setBadge(activeSource,'off','Inactive');
-    document.getElementById('expbtn_'+activeSource).style.display='none';
-    document.getElementById('tile_'+activeSource).classList.remove('active');
-    // Close expanded panel if it was open for the old source
-    if(expandedSource===activeSource) compressPanel();
-    // wait for camera hardware to release (server waits up to 3s anyway)
+      +'</svg><div class="play-hint" onclick="event.stopPropagation();toggleStream(\''+prev+'\')">'
+      +SVG_PLAY+'<span>Play</span></div>';
+    setBadge(prev,'off','Off');
+    setPlayBtn(prev,false);
+    document.getElementById('expbtn_'+prev).style.display='none';
+    document.getElementById('tile_'+prev).classList.remove('active');
+    if(expandedSource===prev) compressPanel();
     await sleep(800);
   }
 
@@ -532,6 +600,7 @@ async function activateCamera(src){
   img.onload=function(){
     ph.style.display='none'; img.style.display='block';
     setBadge(src,'live','● Live');
+    setPlayBtn(src,true);
     document.getElementById('expbtn_'+src).style.display='flex';
     document.getElementById('liveDot').classList.remove('off');
     switching=false;

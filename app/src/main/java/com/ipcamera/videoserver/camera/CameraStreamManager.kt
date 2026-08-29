@@ -54,7 +54,8 @@ class CameraStreamManager @Inject constructor(
     private fun buildStream(source: CameraSource): SharedFlow<ByteArray> =
         callbackFlow<ByteArray> {
             val cameraId = findCameraId(source) ?: run { close(); return@callbackFlow }
-            val imageReader = ImageReader.newInstance(1280, 720, ImageFormat.JPEG, 2)
+            // Small resolution + single buffer = minimum end-to-end latency for live preview
+            val imageReader = ImageReader.newInstance(640, 480, ImageFormat.JPEG, 1)
             imageReader.setOnImageAvailableListener({ reader ->
                 val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
                 try {
@@ -84,9 +85,16 @@ class CameraStreamManager @Inject constructor(
                         object : CameraCaptureSession.StateCallback() {
                             override fun onConfigured(session: CameraCaptureSession) {
                                 captureSession = session
+                                val template = if (extraSurfaces.containsKey(source))
+                                    CameraDevice.TEMPLATE_RECORD
+                                else
+                                    CameraDevice.TEMPLATE_PREVIEW
                                 val request = camera
-                                    .createCaptureRequest(CameraDevice.TEMPLATE_RECORD)
-                                    .apply { surfaces.forEach { addTarget(it) } }
+                                    .createCaptureRequest(template)
+                                    .apply {
+                                        surfaces.forEach { addTarget(it) }
+                                        set(CaptureRequest.JPEG_QUALITY, 70.toByte())
+                                    }
                                     .build()
                                 session.setRepeatingRequest(request, null, handler)
                             }
