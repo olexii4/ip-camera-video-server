@@ -101,7 +101,7 @@ class CameraStreamManager @Inject constructor(
             }
         }.shareIn(
             scope = scope,
-            started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000),
+            started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 200),
             replay = 1,
         )
 

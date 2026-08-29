@@ -165,179 +165,336 @@ private val WEB_UI_HTML = """
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>IP Camera Server</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IP Camera</title>
 <style>
-*{box-sizing:border-box}
-body{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;margin:0;padding:0}
-header{background:#161b22;border-bottom:1px solid #30363d;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-header h1{margin:0;font-size:1rem;white-space:nowrap}
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0e14;--surface:#111827;--border:#1f2937;--border2:#374151;
+  --text:#f1f5f9;--muted:#6b7280;--accent:#3b82f6;--green:#22c55e;
+  --red:#ef4444;--amber:#f59e0b;
+}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* ── HEADER ── */
+header{background:var(--surface);border-bottom:1px solid var(--border);
+  padding:10px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+.logo{font-size:.95rem;font-weight:600;letter-spacing:.01em;display:flex;align-items:center;gap:6px}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
+.logo-dot.off{background:var(--muted);box-shadow:none}
 nav{display:flex;gap:4px;margin-left:auto}
-nav button{background:none;border:1px solid #30363d;color:#8b949e;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:.82rem}
-nav button.active{background:#238636;color:#fff;border-color:#238636}
+.tab{background:none;border:1px solid transparent;color:var(--muted);border-radius:6px;
+  padding:5px 12px;cursor:pointer;font-size:.8rem;transition:all .15s}
+.tab:hover{color:var(--text);border-color:var(--border2)}
+.tab.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tab.logout{color:#f87171}.tab.logout:hover{background:#1f0a0a;border-color:#7f1d1d}
+
+/* ── PAGES ── */
 .page{display:none;padding:16px}
-.page.active{display:block}
-/* Login */
-#loginPage{max-width:340px;margin:50px auto}
-.card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:22px}
-label{display:block;font-size:.82rem;color:#8b949e;margin-bottom:3px}
-input[type=text],input[type=password]{width:100%;padding:9px 11px;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:.92rem;margin-bottom:12px}
-.btn{display:inline-flex;align-items:center;gap:4px;padding:7px 14px;background:#238636;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem;text-decoration:none}
-.btn:hover{background:#2ea043}
-.btn.danger{background:#b91c1c}.btn.danger:hover{background:#991b1b}
-.btn.secondary{background:#21262d;border:1px solid #30363d;color:#e6edf3}.btn.secondary:hover{background:#30363d}
-#loginErr{color:#f85149;font-size:.82rem;margin-top:8px}
-/* Camera — single view with selector */
-#camToolbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
-#camToolbar label{font-size:.82rem;color:#8b949e;margin:0}
-#srcSelect{background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:6px;padding:5px 10px;font-size:.85rem}
-#camWrap{position:relative;background:#161b22;border-radius:8px;overflow:hidden;line-height:0}
-#camWrap img{width:100%;display:block;min-height:200px}
-#camErr{display:none;position:absolute;inset:0;background:#0d1117dd;display:flex;align-items:center;justify-content:center;color:#f85149;font-size:.9rem}
-/* Files */
-#fileList{border:1px solid #30363d;border-radius:8px;overflow:hidden}
-.file-row{display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid #21262d;gap:6px;flex-wrap:wrap}
+.page.on{display:block}
+
+/* ── LOGIN ── */
+#loginWrap{max-width:320px;margin:64px auto}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px}
+.card h2{font-size:1rem;font-weight:600;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+label{display:block;font-size:.78rem;color:var(--muted);margin-bottom:4px;margin-top:10px}
+input[type=text],input[type=password]{
+  width:100%;padding:9px 11px;background:var(--bg);border:1px solid var(--border2);
+  color:var(--text);border-radius:7px;font-size:.9rem;outline:none;transition:border .15s}
+input:focus{border-color:var(--accent)}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:8px 16px;border:none;border-radius:7px;
+  cursor:pointer;font-size:.83rem;font-weight:500;transition:all .15s;text-decoration:none;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:#2563eb}
+.btn-sm{padding:5px 11px;font-size:.78rem}
+.btn-danger{background:var(--red);color:#fff}.btn-danger:hover{background:#dc2626}
+.btn-ghost{background:var(--border);color:var(--text)}.btn-ghost:hover{background:var(--border2)}
+#loginErr{color:var(--red);font-size:.78rem;margin-top:10px;min-height:16px}
+#loginBtn{width:100%;margin-top:16px;justify-content:center}
+
+/* ── CAMERA GRID ── */
+#camGrid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));
+  gap:10px;
+  align-items:start;
+}
+.cam-tile{
+  background:var(--surface);border:2px solid var(--border);border-radius:10px;
+  overflow:hidden;cursor:pointer;transition:border-color .2s,transform .15s;
+  position:relative;
+}
+.cam-tile:hover{border-color:var(--border2)}
+.cam-tile.active{border-color:var(--accent)}
+.cam-tile.expanded{
+  grid-column:1/-1;
+}
+.cam-tile.expanded .cam-frame{max-height:70vh}
+.cam-header{
+  display:flex;align-items:center;gap:8px;padding:8px 12px;
+  background:rgba(0,0,0,.4);position:absolute;top:0;left:0;right:0;z-index:2;
+}
+.cam-name{font-size:.78rem;font-weight:500;flex:1}
+.cam-badge{font-size:.68rem;padding:2px 7px;border-radius:10px;font-weight:600}
+.cam-badge.live{background:rgba(34,197,94,.15);color:var(--green)}
+.cam-badge.off{background:rgba(107,114,128,.12);color:var(--muted)}
+.cam-expand-hint{font-size:.7rem;color:var(--muted)}
+.cam-frame{
+  width:100%;display:block;aspect-ratio:16/9;object-fit:cover;
+  background:#050810;min-height:120px;transition:max-height .25s ease;
+}
+.cam-placeholder{
+  aspect-ratio:16/9;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:8px;
+  background:#050810;color:var(--muted);min-height:120px;
+}
+.cam-placeholder svg{opacity:.35}
+.cam-placeholder span{font-size:.8rem}
+.cam-spinner{
+  width:28px;height:28px;border:2px solid var(--border2);border-top-color:var(--accent);
+  border-radius:50%;animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── FILES ── */
+#fileTools{display:flex;gap:8px;margin-bottom:12px;align-items:center}
+#fileCount{font-size:.78rem;color:var(--muted)}
+.file-list{border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.file-row{display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid var(--border);
+  gap:8px;flex-wrap:wrap;transition:background .1s}
 .file-row:last-child{border-bottom:none}
-.fname{flex:1;font-size:.85rem;word-break:break-all;min-width:120px}
-.fmeta{font-size:.75rem;color:#8b949e;white-space:nowrap}
-.factions{display:flex;gap:6px;flex-shrink:0}
-#fileTools{display:flex;gap:8px;margin-bottom:12px}
-.empty{padding:24px;text-align:center;color:#6e7681;font-size:.88rem}
+.file-row:hover{background:var(--surface)}
+.f-name{flex:1;font-size:.83rem;word-break:break-all;min-width:100px}
+.f-meta{font-size:.73rem;color:var(--muted);white-space:nowrap}
+.f-act{display:flex;gap:6px;flex-shrink:0}
+.empty-state{padding:40px;text-align:center;color:var(--muted);font-size:.85rem;line-height:1.6}
 </style>
 </head>
 <body>
 
-<div id="loginPage" class="page active">
-  <div class="card">
-    <h2 style="margin-top:0;font-size:1.1rem">📷 IP Camera Server</h2>
-    <label>Username</label>
-    <input id="user" type="text" value="admin" autocomplete="username">
-    <label>Password</label>
-    <input id="pass" type="password" value="admin" autocomplete="current-password">
-    <button class="btn" onclick="login()">Connect</button>
-    <div id="loginErr"></div>
+<!-- LOGIN -->
+<div id="loginPage">
+  <div id="loginWrap">
+    <div class="card">
+      <h2><span>IP Camera Server</span></h2>
+      <label>Username</label>
+      <input id="user" type="text" value="admin" autocomplete="username">
+      <label>Password</label>
+      <input id="pass" type="password" value="admin" autocomplete="current-password">
+      <button class="btn btn-primary" id="loginBtn" onclick="login()">Connect</button>
+      <div id="loginErr"></div>
+    </div>
   </div>
 </div>
 
-<div id="app" style="display:none">
+<!-- APP -->
+<div id="appShell" style="display:none">
   <header>
-    <h1>📷 IP Camera</h1>
+    <div class="logo">
+      <div class="logo-dot off" id="liveDot"></div>
+      IP Camera
+    </div>
     <nav>
-      <button class="active" onclick="showTab('cameras',this)">Cameras</button>
-      <button onclick="showTab('files',this)">Files</button>
-      <button style="border-color:#b91c1c;color:#f87171" onclick="logout()">Logout</button>
+      <button class="tab on" onclick="showTab('cameras',this)">Cameras</button>
+      <button class="tab" onclick="showTab('files',this)">Files</button>
+      <button class="tab logout" onclick="logout()">⏏ Logout</button>
     </nav>
   </header>
 
-  <div id="cameras" class="page active">
-    <div id="camToolbar">
-      <label for="srcSelect">Source:</label>
-      <select id="srcSelect" onchange="switchCamera()"></select>
-    </div>
-    <div id="camWrap">
-      <img id="camImg" alt="camera stream">
-      <div id="camErr" style="display:none">⚠ Stream unavailable — device may only support one camera at a time</div>
-    </div>
+  <div id="cameras" class="page on">
+    <div id="camGrid"></div>
   </div>
 
   <div id="files" class="page">
     <div id="fileTools">
-      <button class="btn secondary" onclick="loadFiles()">↻ Refresh</button>
+      <button class="btn btn-ghost btn-sm" onclick="loadFiles()">↻ Refresh</button>
+      <span id="fileCount"></span>
     </div>
-    <div id="fileList"><div class="empty">Loading…</div></div>
+    <div id="fileList"><div class="empty-state">Loading…</div></div>
   </div>
 </div>
 
 <script>
-let TOKEN = '', SOURCES = [];
+let TOKEN='', SOURCES=[], activeSource=null, expandedSource=null, switching=false;
 
-window.addEventListener('DOMContentLoaded', async () => {
-  const cfg = await fetch('/auth-config').then(r => r.json()).catch(() => ({authRequired:true}));
-  if (!cfg.authRequired) { enterApp(); }
+window.addEventListener('DOMContentLoaded', async ()=>{
+  const cfg = await fetch('/auth-config').then(r=>r.json()).catch(()=>({authRequired:true}));
+  if(!cfg.authRequired){ TOKEN=''; enterApp(); }
+  document.getElementById('pass').addEventListener('keydown', e=>{ if(e.key==='Enter') login(); });
 });
 
-async function login() {
-  const err = document.getElementById('loginErr');
-  err.textContent = '';
-  const body = new URLSearchParams({username:document.getElementById('user').value, password:document.getElementById('pass').value});
-  const r = await fetch('/oauth/token', {method:'POST', body});
-  if (!r.ok) { err.textContent = 'Invalid credentials'; return; }
-  TOKEN = (await r.json()).access_token;
+async function login(){
+  const err=document.getElementById('loginErr'); err.textContent='';
+  const btn=document.getElementById('loginBtn'); btn.textContent='Connecting…'; btn.disabled=true;
+  const body=new URLSearchParams({username:document.getElementById('user').value,password:document.getElementById('pass').value});
+  const r=await fetch('/oauth/token',{method:'POST',body});
+  btn.textContent='Connect'; btn.disabled=false;
+  if(!r.ok){err.textContent='Invalid credentials';return;}
+  TOKEN=(await r.json()).access_token;
   enterApp();
 }
 
-function enterApp() {
-  document.getElementById('loginPage').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  loadCameras();
+async function enterApp(){
+  document.getElementById('loginPage').style.display='none';
+  document.getElementById('appShell').style.display='block';
+  await loadCameras();
 }
 
-async function loadCameras() {
-  const r = await fetch('/cameras', {headers:{Authorization:'Bearer '+TOKEN}});
-  SOURCES = r.ok ? await r.json() : ['main'];
-  const sel = document.getElementById('srcSelect');
-  sel.innerHTML = SOURCES.map(s => '<option value="'+s+'">'+s.charAt(0).toUpperCase()+s.slice(1)+' camera</option>').join('');
-  switchCamera();
+function authHeader(){ return TOKEN ? {Authorization:'Bearer '+TOKEN} : {}; }
+
+// ── CAMERAS ──
+async function loadCameras(){
+  const r=await fetch('/cameras',{headers:authHeader()});
+  SOURCES=r.ok?await r.json():['main','front'];
+  renderGrid();
+  if(SOURCES.length>0) activateCamera(SOURCES[0]);
 }
 
-function switchCamera() {
-  const src = document.getElementById('srcSelect').value;
-  const img = document.getElementById('camImg');
-  const errDiv = document.getElementById('camErr');
-  errDiv.style.display = 'none';
-  img.style.display = 'block';
-  img.src = '/stream/' + src + '?token=' + TOKEN;
-  img.onerror = () => {
-    img.style.display = 'none';
-    errDiv.style.display = 'flex';
-  };
-}
-
-async function loadFiles() {
-  const list = document.getElementById('fileList');
-  list.innerHTML = '<div class="empty">Loading…</div>';
-  const r = await fetch('/files', {headers:{Authorization:'Bearer '+TOKEN}});
-  if (!r.ok) { list.innerHTML = '<div class="empty">Error loading files</div>'; return; }
-  const files = await r.json();
-  if (!files.length) { list.innerHTML = '<div class="empty">No recordings yet.<br>Enable archive in Settings to start recording.</div>'; return; }
-  list.innerHTML = files.map(f => {
-    const mb = (f.size/1048576).toFixed(1);
-    const date = new Date(f.modified).toLocaleString();
-    const safeName = encodeURIComponent(f.name);
-    return '<div class="file-row">'
-      + '<span class="fname">'+f.name+'</span>'
-      + '<span class="fmeta">'+mb+' MB &nbsp;'+date+'</span>'
-      + '<span class="factions">'
-      + '<a class="btn" href="/files/download/'+safeName+'?token='+TOKEN+'" download="'+f.name+'">⬇ Download</a>'
-      + '<button class="btn danger" onclick="deleteFile(\''+f.name+'\')">🗑</button>'
-      + '</span></div>';
+function renderGrid(){
+  const grid=document.getElementById('camGrid');
+  grid.innerHTML=SOURCES.map(function(src){
+    const label=src.charAt(0).toUpperCase()+src.slice(1)+' camera';
+    return '<div class="cam-tile" id="tile_'+src+'" onclick="handleTileClick(\''+src+'\')">'
+      +'<div class="cam-header">'
+      +'<span class="cam-name">'+label+'</span>'
+      +'<span class="cam-badge off" id="badge_'+src+'">Inactive</span>'
+      +'<span class="cam-expand-hint" id="hint_'+src+'"></span>'
+      +'</div>'
+      +'<div class="cam-placeholder" id="ph_'+src+'">'
+      +'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">'
+      +'<path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>'
+      +'</svg><span>Click to view</span></div>'
+      +'<img class="cam-frame" id="img_'+src+'" style="display:none" alt="'+src+'">'
+      +'</div>';
   }).join('');
 }
 
-async function deleteFile(name) {
-  if (!confirm('Delete ' + name + '?')) return;
-  const r = await fetch('/files/delete/' + encodeURIComponent(name), {method:'POST', headers:{Authorization:'Bearer '+TOKEN}});
-  if (r.ok) loadFiles(); else alert('Delete failed');
+function handleTileClick(src){
+  if(switching) return;
+  if(src===activeSource){
+    toggleExpand(src);
+  } else {
+    activateCamera(src);
+  }
 }
 
-async function logout() {
-  await fetch('/logout', {method:'POST', headers:{Authorization:'Bearer '+TOKEN}}).catch(()=>{});
-  TOKEN = '';
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('loginPage').style.display = 'block';
-  document.getElementById('loginPage').className = 'page active';
-  document.getElementById('camImg').src = '';
+async function activateCamera(src){
+  if(switching) return;
+  switching=true;
+
+  // Stop old stream
+  if(activeSource){
+    const oldImg=document.getElementById('img_'+activeSource);
+    oldImg.src=''; oldImg.style.display='none';
+    document.getElementById('ph_'+activeSource).style.display='flex';
+    setBadge(activeSource,'off','Inactive');
+    setHint(activeSource,'');
+    document.getElementById('tile_'+activeSource).classList.remove('active');
+    // collapse if it was expanded
+    if(expandedSource===activeSource){
+      document.getElementById('tile_'+activeSource).classList.remove('expanded');
+      expandedSource=null;
+    }
+    // wait for camera hardware to release
+    await sleep(500);
+  }
+
+  activeSource=src;
+  const tile=document.getElementById('tile_'+src);
+  const ph=document.getElementById('ph_'+src);
+  const img=document.getElementById('img_'+src);
+
+  tile.classList.add('active');
+  setBadge(src,'',''); // spinner state
+  ph.innerHTML='<div class="cam-spinner"></div>';
+  ph.style.display='flex';
+  img.style.display='none';
+
+  img.onload=()=>{
+    ph.style.display='none'; img.style.display='block';
+    setBadge(src,'live','● Live');
+    setHint(src,'Click to expand');
+    document.getElementById('liveDot').classList.remove('off');
+    switching=false;
+  };
+  img.onerror=()=>{
+    ph.innerHTML='<span style="color:#ef4444;font-size:.8rem">⚠ Stream unavailable</span>';
+    setBadge(src,'off','Error');
+    setHint(src,'');
+    document.getElementById('liveDot').classList.add('off');
+    switching=false;
+  };
+  img.src='/stream/'+src+(TOKEN?'?token='+TOKEN:'');
 }
 
-function showTab(id, btn) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  btn.classList.add('active');
-  if (id === 'files') loadFiles();
+function toggleExpand(src){
+  const tile=document.getElementById('tile_'+src);
+  if(expandedSource===src){
+    tile.classList.remove('expanded');
+    setHint(src,'Click to expand');
+    expandedSource=null;
+  } else {
+    if(expandedSource){
+      document.getElementById('tile_'+expandedSource).classList.remove('expanded');
+    }
+    tile.classList.add('expanded');
+    setHint(src,'Click to collapse');
+    expandedSource=src;
+    tile.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
 }
 
-document.addEventListener('keydown', e => { if(e.key==='Enter' && !document.getElementById('loginPage').style.display) login(); });
+function setBadge(src,cls,text){
+  const b=document.getElementById('badge_'+src);
+  b.className='cam-badge'+(cls?' '+cls:'');
+  b.textContent=text;
+}
+function setHint(src,text){ document.getElementById('hint_'+src).textContent=text; }
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+// ── FILES ──
+async function loadFiles(){
+  const list=document.getElementById('fileList'); list.innerHTML='<div class="empty-state">Loading…</div>';
+  const r=await fetch('/files',{headers:authHeader()});
+  if(!r.ok){list.innerHTML='<div class="empty-state">Error loading files</div>';return;}
+  const files=await r.json();
+  document.getElementById('fileCount').textContent=files.length+' recording'+(files.length!==1?'s':'');
+  if(!files.length){list.innerHTML='<div class="empty-state">No recordings yet.<br>Enable archive recording in Settings.</div>';return;}
+  list.innerHTML='<div class="file-list">'+files.map(f=>{
+    const mb=(f.size/1048576).toFixed(1);
+    const date=new Date(f.modified).toLocaleString();
+    const enc=encodeURIComponent(f.name);
+    return '<div class="file-row">'
+      +'<span class="f-name">'+f.name+'</span>'
+      +'<span class="f-meta">'+mb+' MB &nbsp;·&nbsp; '+date+'</span>'
+      +'<span class="f-act">'
+      +'<a class="btn btn-ghost btn-sm" href="/files/download/'+enc+(TOKEN?'?token='+TOKEN:'')+'" download="'+f.name+'">⬇ Download</a>'
+      +'<button class="btn btn-danger btn-sm" onclick="deleteFile(\''+f.name+'\')">🗑</button>'
+      +'</span></div>';
+  }).join('')+'</div>';
+}
+
+async function deleteFile(name){
+  if(!confirm('Delete '+name+'?')) return;
+  const r=await fetch('/files/delete/'+encodeURIComponent(name),{method:'POST',headers:authHeader()});
+  if(r.ok) loadFiles(); else alert('Delete failed');
+}
+
+// ── NAV ──
+function showTab(id,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  btn.classList.add('on');
+  if(id==='files') loadFiles();
+}
+
+async function logout(){
+  if(activeSource){ document.getElementById('img_'+activeSource).src=''; }
+  await fetch('/logout',{method:'POST',headers:authHeader()}).catch(()=>{});
+  TOKEN=''; activeSource=null; expandedSource=null;
+  document.getElementById('appShell').style.display='none';
+  document.getElementById('loginPage').style.display='block';
+}
 </script>
 </body>
 </html>
