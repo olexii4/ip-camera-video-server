@@ -30,15 +30,33 @@ echo "Installing $APK..."
 "$ADB" install -r "$APK"
 
 echo ""
-echo "Launching app..."
+echo "Configuring device for background services..."
+# Extend screen timeout so the app can be interacted with after install
+"$ADB" shell settings put system screen_off_timeout 1800000
+# Whitelist for device idle so the foreground service isn't killed
+"$ADB" shell dumpsys deviceidle whitelist +com.ipcamera.videoserver > /dev/null 2>&1 || true
+# Allow background starts (needed on EMUI)
+"$ADB" shell appops set com.ipcamera.videoserver RUN_IN_BACKGROUND allow 2>/dev/null || true
+"$ADB" shell appops set com.ipcamera.videoserver START_FOREGROUND allow 2>/dev/null || true
+"$ADB" shell settings put global app_standby_enabled 0 2>/dev/null || true
+
+echo ""
+echo "Waking screen and launching app..."
+"$ADB" shell input keyevent KEYCODE_POWER
+sleep 1
+"$ADB" shell wm dismiss-keyguard
+sleep 1
+"$ADB" shell input swipe 540 1500 540 500
+sleep 1
 "$ADB" shell am start -n com.ipcamera.videoserver/.ui.MainActivity
 
 echo ""
 echo "Setting up ADB port forward (localhost:8080 → device:8080)..."
 "$ADB" forward tcp:8080 tcp:8080
 echo ""
-echo "App installed and running."
-echo "Connect to the server at: http://127.0.0.1:8080"
+echo "App installed and launched."
+echo ""
+echo "Tap 'Start Server' in the app, then connect at: http://127.0.0.1:8080"
 echo ""
 echo "Get a token:"
 echo "  curl -s -X POST http://127.0.0.1:8080/oauth/token -d 'username=admin&password=admin'"

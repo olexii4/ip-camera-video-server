@@ -2,6 +2,7 @@ package com.ipcamera.videoserver.archive
 
 import android.content.Context
 import android.media.MediaRecorder
+import android.os.Build
 import android.view.Surface
 import com.ipcamera.videoserver.camera.CameraSource
 import java.io.File
@@ -14,7 +15,12 @@ class SegmentRecorder(
     private var recorder: MediaRecorder? = null
 
     fun prepare(): Surface {
-        val r = MediaRecorder(context)
+        val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            MediaRecorder(context)
+        } else {
+            @Suppress("DEPRECATION")
+            MediaRecorder()
+        }
         r.setVideoSource(MediaRecorder.VideoSource.SURFACE)
         r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
         r.setVideoEncoder(MediaRecorder.VideoEncoder.H264)
