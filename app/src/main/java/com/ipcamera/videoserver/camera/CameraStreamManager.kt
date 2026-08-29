@@ -101,6 +101,9 @@ class CameraStreamManager @Inject constructor(
         }
     }
 
+    fun availableSources(): List<CameraSource> =
+        CameraSource.entries.filter { it != CameraSource.USB && findCameraId(it) != null }
+
     fun stopAll() {
         handlerThread.quitSafely()
     }

@@ -38,6 +38,7 @@ class CameraServerService : LifecycleService() {
 
     @Inject lateinit var settings: AppSettings
     @Inject lateinit var authManager: AuthManager
+    @Inject lateinit var sessionRegistry: com.ipcamera.videoserver.auth.SessionRegistry
     @Inject lateinit var webServer: WebServer
     @Inject lateinit var ftpServer: FtpServer
     @Inject lateinit var archiveManager: ArchiveManager
@@ -118,6 +119,7 @@ class CameraServerService : LifecycleService() {
     override fun onDestroy() {
         archiveJobs.values.forEach { it.cancel() }
         archiveJobs.clear()
+        sessionRegistry.clearAll()
         webServer.stop()
         ftpServer.stop()
         cameraStreamManager.stopAll()

@@ -6,6 +6,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ipcamera.videoserver.archive.ArchiveManager
+import com.ipcamera.videoserver.auth.AuthManager
 import com.ipcamera.videoserver.auth.SessionRegistry
 import com.ipcamera.videoserver.service.CameraServerService
 import com.ipcamera.videoserver.settings.AppSettings
@@ -21,6 +22,7 @@ import javax.inject.Inject
 class AppViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     val settings: AppSettings,
+    private val authManager: AuthManager,
     private val sessionRegistry: SessionRegistry,
     private val archiveManager: ArchiveManager,
 ) : ViewModel() {
@@ -32,6 +34,8 @@ class AppViewModel @Inject constructor(
 
     private val _archiveFiles = MutableStateFlow<List<File>>(emptyList())
     val archiveFiles: StateFlow<List<File>> = _archiveFiles
+
+    fun hashPassword(plain: String): String = authManager.hashPassword(plain)
 
     fun refreshArchive() {
         _archiveFiles.value = archiveManager.listFiles()

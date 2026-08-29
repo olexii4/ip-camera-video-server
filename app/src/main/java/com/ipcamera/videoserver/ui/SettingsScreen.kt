@@ -9,12 +9,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(vm: AppViewModel) {
     val scope = rememberCoroutineScope()
+
+    // Read current persisted values once as initial state
     val serverPort by vm.settings.serverPort.collectAsState(initial = 8080)
     val smsNumber by vm.settings.smsTargetNumber.collectAsState(initial = "")
     val archiveMaxFiles by vm.settings.archiveMaxFiles.collectAsState(initial = 1440)
@@ -25,27 +28,39 @@ fun SettingsScreen(vm: AppViewModel) {
     val ftpPort by vm.settings.ftpPort.collectAsState(initial = 2121)
     val startOnBoot by vm.settings.serverStartedOnBoot.collectAsState(initial = false)
 
+    // Local draft state for fields that need explicit Save
+    var draftPort by remember(serverPort) { mutableStateOf(serverPort.toString()) }
+    var draftPassword by remember { mutableStateOf("") }
+    var draftSms by remember(smsNumber) { mutableStateOf(smsNumber) }
+    var draftMaxFiles by remember(archiveMaxFiles) { mutableStateOf(archiveMaxFiles.toString()) }
+    var draftMaxSizeGb by remember(archiveMaxSizeGb) { mutableStateOf(archiveMaxSizeGb.toString()) }
+    var draftFtpPort by remember(ftpPort) { mutableStateOf(ftpPort.toString()) }
+
+    var savedSnack by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text("Settings", style = MaterialTheme.typography.headlineMedium)
 
         SectionHeader("Web Server")
-        SettingTextField("Port", serverPort.toString(), KeyboardType.Number) { v ->
-            v.toIntOrNull()?.let { scope.launch { vm.settings.setServerPort(it) } }
-        }
+        DraftTextField("Port", draftPort, KeyboardType.Number) { draftPort = it }
+        DraftTextField("SMS notification number", draftSms, KeyboardType.Phone) { draftSms = it }
         LabeledSwitch("Start on boot", startOnBoot) {
             scope.launch { vm.settings.setServerStartedOnBoot(it) }
         }
 
-        SectionHeader("SMS Notification")
-        SettingTextField("Target phone number", smsNumber, KeyboardType.Phone) { v ->
-            scope.launch { vm.settings.setSmsTargetNumber(v) }
-        }
+        SectionHeader("Change Password")
+        DraftTextField(
+            "New password (leave blank to keep current)",
+            draftPassword,
+            KeyboardType.Password,
+            visualTransformation = true,
+        ) { draftPassword = it }
 
         SectionHeader("Archive")
         LabeledSwitch("Record main camera", archiveEnabledMain) {
@@ -54,25 +69,55 @@ fun SettingsScreen(vm: AppViewModel) {
         LabeledSwitch("Record front camera", archiveEnabledFront) {
             scope.launch { vm.settings.setArchiveEnabledFront(it) }
         }
-        SettingTextField("Max files", archiveMaxFiles.toString(), KeyboardType.Number) { v ->
-            v.toIntOrNull()?.let { scope.launch { vm.settings.setArchiveMaxFiles(it) } }
-        }
-        SettingTextField("Max storage (GB)", archiveMaxSizeGb.toString(), KeyboardType.Number) { v ->
-            v.toIntOrNull()?.let { scope.launch { vm.settings.setArchiveMaxSizeGb(it) } }
-        }
+        DraftTextField("Max files", draftMaxFiles, KeyboardType.Number) { draftMaxFiles = it }
+        DraftTextField("Max storage (GB)", draftMaxSizeGb, KeyboardType.Number) { draftMaxSizeGb = it }
 
         SectionHeader("FTP Server")
         LabeledSwitch("FTP enabled", ftpEnabled) {
             scope.launch { vm.settings.setFtpEnabled(it) }
         }
-        SettingTextField("FTP port", ftpPort.toString(), KeyboardType.Number) { v ->
-            v.toIntOrNull()?.let { scope.launch { vm.settings.setFtpPort(it) } }
-        }
+        DraftTextField("FTP port", draftFtpPort, KeyboardType.Number) { draftFtpPort = it }
         if (ftpEnabled) {
             Text(
-                "Warning: FTP transfers data unencrypted. Use on trusted networks only.",
+                "FTP transmits data unencrypted. Use on trusted networks only.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
+            )
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        Button(
+            onClick = {
+                scope.launch {
+                    draftPort.toIntOrNull()?.let { vm.settings.setServerPort(it) }
+                    vm.settings.setSmsTargetNumber(draftSms)
+                    draftMaxFiles.toIntOrNull()?.let { vm.settings.setArchiveMaxFiles(it) }
+                    draftMaxSizeGb.toIntOrNull()?.let { vm.settings.setArchiveMaxSizeGb(it) }
+                    draftFtpPort.toIntOrNull()?.let { vm.settings.setFtpPort(it) }
+                    if (draftPassword.isNotEmpty()) {
+                        val hash = vm.hashPassword(draftPassword)
+                        vm.settings.setAdminPasswordHash(hash)
+                        vm.settings.setAdminPasswordPlain(draftPassword)
+                        draftPassword = ""
+                    }
+                    savedSnack = true
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Save Settings")
+        }
+
+        if (savedSnack) {
+            LaunchedEffect(savedSnack) {
+                kotlinx.coroutines.delay(2000)
+                savedSnack = false
+            }
+            Text(
+                "✓ Saved. Restart the server to apply changes.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
     }
@@ -85,18 +130,19 @@ private fun SectionHeader(title: String) {
 }
 
 @Composable
-private fun SettingTextField(
+private fun DraftTextField(
     label: String,
     value: String,
     keyboardType: KeyboardType,
-    onSave: (String) -> Unit,
+    visualTransformation: Boolean = false,
+    onChange: (String) -> Unit,
 ) {
-    var text by remember(value) { mutableStateOf(value) }
     OutlinedTextField(
-        value = text,
-        onValueChange = { text = it; onSave(it) },
+        value = value,
+        onValueChange = onChange,
         label = { Text(label) },
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        visualTransformation = if (visualTransformation) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
     )

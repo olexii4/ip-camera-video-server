@@ -1,5 +1,6 @@
 package com.ipcamera.videoserver.server
 
+import com.ipcamera.videoserver.archive.ArchiveManager
 import com.ipcamera.videoserver.auth.AuthManager
 import com.ipcamera.videoserver.auth.SessionInfo
 import com.ipcamera.videoserver.auth.SessionRegistry
@@ -16,16 +17,19 @@ import io.ktor.utils.io.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val BOUNDARY = "frame"
+private val json = Json { ignoreUnknownKeys = true }
 
 @Singleton
 class WebServer @Inject constructor(
     private val authManager: AuthManager,
     private val sessionRegistry: SessionRegistry,
     private val cameraStreamManager: CameraStreamManager,
+    private val archiveManager: ArchiveManager,
 ) {
     private var server: ApplicationEngine? = null
 
@@ -34,10 +38,7 @@ class WebServer @Inject constructor(
             routing {
                 get("/ping") { call.respondText("pong") }
 
-                // Browser-friendly login page
-                get("/") {
-                    call.respondText(WEB_UI_HTML, ContentType.Text.Html)
-                }
+                get("/") { call.respondText(WEB_UI_HTML, ContentType.Text.Html) }
 
                 post("/oauth/token") {
                     val params = call.receiveParameters()
@@ -45,47 +46,29 @@ class WebServer @Inject constructor(
                         ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing username")
                     val password = params["password"]
                         ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing password")
-
                     val token = authManager.issueToken(username, password)
-                        ?: return@post call.respond(
-                            HttpStatusCode.Unauthorized,
-                            """{"error":"invalid_credentials"}""",
-                        )
-
+                        ?: return@post call.respond(HttpStatusCode.Unauthorized, """{"error":"invalid_credentials"}""")
                     val claims = authManager.validateToken(token)!!
-                    sessionRegistry.register(
-                        SessionInfo(
-                            tokenId = claims.tokenId,
-                            username = claims.username,
-                            remoteAddress = call.request.local.remoteAddress,
-                        ),
-                    )
-                    call.respondText(
-                        Json.encodeToString(TokenResponse(token, "Bearer", 3600)),
-                        ContentType.Application.Json,
-                    )
+                    sessionRegistry.register(SessionInfo(claims.tokenId, claims.username, call.request.local.remoteAddress))
+                    call.respondText(json.encodeToString(TokenResponse(token, "Bearer", 3600)), ContentType.Application.Json)
+                }
+
+                // Returns which camera sources are physically present on this device
+                get("/cameras") {
+                    requireAuth(call) ?: return@get
+                    val sources = cameraStreamManager.availableSources().map { it.id }
+                    call.respondText(json.encodeToString(sources), ContentType.Application.Json)
                 }
 
                 get("/stream/{source}") {
-                    // Accept token from Authorization header OR ?token= query param
-                    val bearer = extractBearer(call)
-                        ?: call.request.queryParameters["token"]
-                        ?: return@get call.respond(HttpStatusCode.Unauthorized)
-                    authManager.validateToken(bearer)
-                        ?: return@get call.respond(HttpStatusCode.Unauthorized)
-
-                    val sourceId = call.parameters["source"]
-                        ?: return@get call.respond(HttpStatusCode.BadRequest)
+                    requireAuth(call) ?: return@get
+                    val sourceId = call.parameters["source"] ?: return@get call.respond(HttpStatusCode.BadRequest)
                     val source = CameraSource.entries.firstOrNull { it.id == sourceId }
                         ?: return@get call.respond(HttpStatusCode.NotFound, "Unknown source: $sourceId")
-
                     call.response.header(HttpHeaders.CacheControl, "no-cache")
-                    call.respondBytesWriter(
-                        contentType = ContentType.parse("multipart/x-mixed-replace; boundary=$BOUNDARY"),
-                    ) {
+                    call.respondBytesWriter(contentType = ContentType.parse("multipart/x-mixed-replace; boundary=$BOUNDARY")) {
                         cameraStreamManager.getStream(source).collect { jpegBytes ->
-                            val header = "--$BOUNDARY\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpegBytes.size}\r\n\r\n"
-                            writeStringUtf8(header)
+                            writeStringUtf8("--$BOUNDARY\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpegBytes.size}\r\n\r\n")
                             writeFully(jpegBytes)
                             writeStringUtf8("\r\n")
                             flush()
@@ -94,19 +77,34 @@ class WebServer @Inject constructor(
                 }
 
                 get("/status") {
-                    val bearer = extractBearer(call)
-                        ?: call.request.queryParameters["token"]
-                        ?: return@get call.respond(HttpStatusCode.Unauthorized)
-                    authManager.validateToken(bearer)
-                        ?: return@get call.respond(HttpStatusCode.Unauthorized)
+                    requireAuth(call) ?: return@get
+                    val sessions = sessionRegistry.activeSessions().map { SessionDto(it.username, it.remoteAddress, it.connectedAt) }
+                    call.respondText(json.encodeToString(StatusResponse(running = true, activeSessions = sessions)), ContentType.Application.Json)
+                }
 
-                    val sessions = sessionRegistry.activeSessions().map {
-                        SessionDto(it.username, it.remoteAddress, it.connectedAt)
-                    }
-                    call.respondText(
-                        Json.encodeToString(StatusResponse(running = true, activeSessions = sessions)),
-                        ContentType.Application.Json,
-                    )
+                // List archive files as JSON
+                get("/files") {
+                    requireAuth(call) ?: return@get
+                    val files = archiveManager.listFiles().map { FileDto(it.name, it.length(), it.lastModified()) }
+                    call.respondText(json.encodeToString(files), ContentType.Application.Json)
+                }
+
+                // Download a single archive file
+                get("/files/download/{name}") {
+                    requireAuth(call) ?: return@get
+                    val name = call.parameters["name"] ?: return@get call.respond(HttpStatusCode.BadRequest)
+                    val file = safeArchiveFile(name) ?: return@get call.respond(HttpStatusCode.NotFound)
+                    call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"${file.name}\"")
+                    call.respondFile(file)
+                }
+
+                // Delete a single archive file
+                post("/files/delete/{name}") {
+                    requireAuth(call) ?: return@post
+                    val name = call.parameters["name"] ?: return@post call.respond(HttpStatusCode.BadRequest)
+                    val file = safeArchiveFile(name) ?: return@post call.respond(HttpStatusCode.NotFound)
+                    file.delete()
+                    call.respond(HttpStatusCode.OK, """{"deleted":"${file.name}"}""")
                 }
             }
         }.start(wait = false)
@@ -117,21 +115,32 @@ class WebServer @Inject constructor(
         server = null
     }
 
+    private suspend fun requireAuth(call: ApplicationCall): Unit? {
+        val bearer = extractBearer(call) ?: call.request.queryParameters["token"]
+        if (bearer == null || authManager.validateToken(bearer) == null) {
+            call.respond(HttpStatusCode.Unauthorized)
+            return null
+        }
+        return Unit
+    }
+
     private fun extractBearer(call: ApplicationCall): String? =
         call.request.header(HttpHeaders.Authorization)
             ?.takeIf { it.startsWith("Bearer ", ignoreCase = true) }
-            ?.removePrefix("Bearer ")
-            ?.trim()
+            ?.removePrefix("Bearer ")?.trim()
+
+    private fun safeArchiveFile(name: String): File? {
+        val file = File(archiveManager.archiveDir, File(name).name)
+        if (!file.exists()) return null
+        if (!file.canonicalPath.startsWith(archiveManager.archiveDir.canonicalPath)) return null
+        return file
+    }
 }
 
-@Serializable
-private data class TokenResponse(val access_token: String, val token_type: String, val expires_in: Int)
-
-@Serializable
-private data class StatusResponse(val running: Boolean, val activeSessions: List<SessionDto>)
-
-@Serializable
-private data class SessionDto(val username: String, val remoteAddress: String, val connectedAt: Long)
+@Serializable private data class TokenResponse(val access_token: String, val token_type: String, val expires_in: Int)
+@Serializable private data class StatusResponse(val running: Boolean, val activeSessions: List<SessionDto>)
+@Serializable private data class SessionDto(val username: String, val remoteAddress: String, val connectedAt: Long)
+@Serializable private data class FileDto(val name: String, val size: Long, val modified: Long)
 
 private val WEB_UI_HTML = """
 <!DOCTYPE html>
@@ -141,58 +150,145 @@ private val WEB_UI_HTML = """
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>IP Camera Server</title>
 <style>
-  body{font-family:sans-serif;background:#0d1117;color:#e6edf3;margin:0;padding:24px}
-  h1{font-size:1.4rem;margin-bottom:20px}
-  input{width:100%;box-sizing:border-box;padding:10px;margin:6px 0 14px;background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:1rem}
-  button{width:100%;padding:10px;background:#238636;color:#fff;border:none;border-radius:6px;font-size:1rem;cursor:pointer}
-  button:hover{background:#2ea043}
-  .streams{display:none;margin-top:24px}
-  .stream-box{margin-bottom:24px}
-  .stream-box h3{margin:0 0 8px;font-size:0.9rem;color:#8b949e;text-transform:uppercase}
-  img.stream{width:100%;border-radius:8px;background:#161b22;min-height:120px}
-  #msg{margin-top:12px;color:#f85149;font-size:0.9rem}
-  a.copy{font-size:0.75rem;color:#58a6ff;text-decoration:none;margin-left:8px}
+*{box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;margin:0;padding:0}
+header{background:#161b22;border-bottom:1px solid #30363d;padding:14px 20px;display:flex;align-items:center;gap:12px}
+header h1{margin:0;font-size:1.1rem}
+nav{display:flex;gap:4px;margin-left:auto}
+nav button{background:none;border:1px solid #30363d;color:#8b949e;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:.85rem}
+nav button.active{background:#238636;color:#fff;border-color:#238636}
+.page{display:none;padding:20px}
+.page.active{display:block}
+/* Login */
+#loginPage{max-width:360px;margin:60px auto}
+.card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:24px}
+label{display:block;font-size:.85rem;color:#8b949e;margin-bottom:4px}
+input[type=text],input[type=password]{width:100%;padding:9px 12px;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:.95rem;margin-bottom:14px}
+.btn{display:inline-block;padding:9px 18px;background:#238636;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.9rem}
+.btn:hover{background:#2ea043}
+.btn.danger{background:#b91c1c}.btn.danger:hover{background:#991b1b}
+.btn.secondary{background:#21262d;border:1px solid #30363d}.btn.secondary:hover{background:#30363d}
+#loginErr{color:#f85149;font-size:.85rem;margin-top:8px}
+/* Cameras */
+#camGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.cam-box h3{margin:0 0 8px;font-size:.8rem;color:#8b949e;text-transform:uppercase;letter-spacing:.06em}
+.cam-box img{width:100%;border-radius:8px;background:#161b22;display:block;min-height:160px}
+.cam-box .err{color:#f85149;font-size:.8rem;margin-top:6px;display:none}
+/* Files */
+#fileList{border:1px solid #30363d;border-radius:8px;overflow:hidden}
+.file-row{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid #21262d;gap:8px}
+.file-row:last-child{border-bottom:none}
+.file-row:hover{background:#161b22}
+.fname{flex:1;font-size:.9rem;word-break:break-all}
+.fsize{font-size:.8rem;color:#8b949e;white-space:nowrap;margin-right:8px}
+.fdate{font-size:.75rem;color:#6e7681;white-space:nowrap;margin-right:8px}
+#fileTools{display:flex;gap:8px;margin-bottom:14px}
+#emptyMsg{padding:24px;text-align:center;color:#6e7681;font-size:.9rem}
 </style>
 </head>
 <body>
-<h1>📷 IP Camera Server</h1>
-<form id="loginForm">
-  <label>Username</label>
-  <input id="user" type="text" value="admin" autocomplete="username">
-  <label>Password</label>
-  <input id="pass" type="password" value="admin" autocomplete="current-password">
-  <button type="submit">Connect</button>
-  <div id="msg"></div>
-</form>
-<div class="streams" id="streams">
-  <div class="stream-box">
-    <h3>Main camera <a class="copy" id="mainLink" href="#">copy URL</a></h3>
-    <img class="stream" id="imgMain" alt="main camera">
-  </div>
-  <div class="stream-box">
-    <h3>Front camera <a class="copy" id="frontLink" href="#">copy URL</a></h3>
-    <img class="stream" id="imgFront" alt="front camera">
+<!-- LOGIN -->
+<div id="loginPage" class="page active">
+  <div class="card">
+    <h2 style="margin-top:0">📷 IP Camera Server</h2>
+    <label>Username</label>
+    <input id="user" type="text" value="admin" autocomplete="username">
+    <label>Password</label>
+    <input id="pass" type="password" value="admin" autocomplete="current-password">
+    <button class="btn" onclick="login()">Connect</button>
+    <div id="loginErr"></div>
   </div>
 </div>
+
+<!-- MAIN APP -->
+<div id="app" style="display:none">
+  <header>
+    <h1>📷 IP Camera</h1>
+    <nav>
+      <button class="active" onclick="showTab('cameras',this)">Cameras</button>
+      <button onclick="showTab('files',this)">Files</button>
+    </nav>
+  </header>
+
+  <!-- Cameras tab -->
+  <div id="cameras" class="page active">
+    <div id="camGrid"></div>
+  </div>
+
+  <!-- Files tab -->
+  <div id="files" class="page">
+    <div id="fileTools">
+      <button class="btn secondary" onclick="loadFiles()">↻ Refresh</button>
+    </div>
+    <div id="fileList"><div id="emptyMsg">Loading…</div></div>
+  </div>
+</div>
+
 <script>
-document.getElementById('loginForm').onsubmit = async e => {
-  e.preventDefault();
-  const msg = document.getElementById('msg');
-  msg.textContent = '';
+let TOKEN = '';
+
+async function login() {
+  const err = document.getElementById('loginErr');
+  err.textContent = '';
   const body = new URLSearchParams({username: document.getElementById('user').value, password: document.getElementById('pass').value});
   const r = await fetch('/oauth/token', {method:'POST', body});
-  if (!r.ok) { msg.textContent = 'Login failed'; return; }
-  const {access_token} = await r.json();
-  const base = window.location.origin;
-  const mainUrl = base + '/stream/main?token=' + access_token;
-  const frontUrl = base + '/stream/front?token=' + access_token;
-  document.getElementById('imgMain').src = mainUrl;
-  document.getElementById('imgFront').src = frontUrl;
-  document.getElementById('mainLink').onclick = e => { e.preventDefault(); navigator.clipboard.writeText(mainUrl); };
-  document.getElementById('frontLink').onclick = e => { e.preventDefault(); navigator.clipboard.writeText(frontUrl); };
-  document.getElementById('loginForm').style.display = 'none';
-  document.getElementById('streams').style.display = 'block';
-};
+  if (!r.ok) { err.textContent = 'Invalid credentials'; return; }
+  TOKEN = (await r.json()).access_token;
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  await loadCameras();
+}
+
+async function loadCameras() {
+  const r = await fetch('/cameras', {headers:{Authorization:'Bearer '+TOKEN}});
+  const sources = r.ok ? await r.json() : ['main','front'];
+  const grid = document.getElementById('camGrid');
+  grid.innerHTML = '';
+  sources.forEach(src => {
+    const box = document.createElement('div');
+    box.className = 'cam-box';
+    const url = '/stream/' + src + '?token=' + TOKEN;
+    box.innerHTML = '<h3>' + src + ' camera</h3><img src="' + url + '" alt="' + src + '" onerror="this.nextElementSibling.style.display=\'block\'"><div class="err">⚠ Stream unavailable</div>';
+    grid.appendChild(box);
+  });
+}
+
+async function loadFiles() {
+  const list = document.getElementById('fileList');
+  list.innerHTML = '<div id="emptyMsg">Loading…</div>';
+  const r = await fetch('/files', {headers:{Authorization:'Bearer '+TOKEN}});
+  if (!r.ok) { list.innerHTML = '<div id="emptyMsg">Error loading files</div>'; return; }
+  const files = await r.json();
+  if (!files.length) { list.innerHTML = '<div id="emptyMsg">No recordings yet</div>'; return; }
+  list.innerHTML = files.map(f => {
+    const mb = (f.size/1048576).toFixed(1);
+    const date = new Date(f.modified).toLocaleString();
+    return '<div class="file-row">'
+      + '<span class="fname">' + f.name + '</span>'
+      + '<span class="fsize">' + mb + ' MB</span>'
+      + '<span class="fdate">' + date + '</span>'
+      + '<a class="btn" href="/files/download/' + f.name + '?token=' + TOKEN + '" download="' + f.name + '">⬇</a>'
+      + '<button class="btn danger" onclick="deleteFile(\'' + f.name + '\')">🗑</button>'
+      + '</div>';
+  }).join('');
+}
+
+async function deleteFile(name) {
+  if (!confirm('Delete ' + name + '?')) return;
+  const r = await fetch('/files/delete/' + name, {method:'POST', headers:{Authorization:'Bearer '+TOKEN}});
+  if (r.ok) loadFiles();
+  else alert('Delete failed');
+}
+
+function showTab(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+  if (id === 'files') loadFiles();
+}
+
+document.addEventListener('keydown', e => { if(e.key==='Enter' && document.getElementById('loginPage').style.display!=='none') login(); });
 </script>
 </body>
 </html>
