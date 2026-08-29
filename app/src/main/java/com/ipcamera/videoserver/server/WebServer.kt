@@ -60,6 +60,15 @@ class WebServer @Inject constructor(
                     call.respondText(json.encodeToString(sources), ContentType.Application.Json)
                 }
 
+                post("/logout") {
+                    val bearer = extractBearer(call) ?: call.request.queryParameters["token"]
+                    if (bearer != null) {
+                        val claims = authManager.validateToken(bearer)
+                        if (claims != null) sessionRegistry.revoke(claims.tokenId)
+                    }
+                    call.respond(HttpStatusCode.OK, """{"logged_out":true}""")
+                }
+
                 get("/stream/{source}") {
                     requireAuth(call) ?: return@get
                     val sourceId = call.parameters["source"] ?: return@get call.respond(HttpStatusCode.BadRequest)
@@ -207,6 +216,7 @@ input[type=text],input[type=password]{width:100%;padding:9px 11px;background:#0d
     <nav>
       <button class="active" onclick="showTab('cameras',this)">Cameras</button>
       <button onclick="showTab('files',this)">Files</button>
+      <button style="border-color:#b91c1c;color:#f87171" onclick="logout()">Logout</button>
     </nav>
   </header>
 
@@ -290,6 +300,15 @@ async function deleteFile(name) {
   if (!confirm('Delete ' + name + '?')) return;
   const r = await fetch('/files/delete/' + encodeURIComponent(name), {method:'POST', headers:{Authorization:'Bearer '+TOKEN}});
   if (r.ok) loadFiles(); else alert('Delete failed');
+}
+
+async function logout() {
+  await fetch('/logout', {method:'POST', headers:{Authorization:'Bearer '+TOKEN}}).catch(()=>{});
+  TOKEN = '';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginPage').style.display = 'block';
+  document.getElementById('loginPage').className = 'page active';
+  document.getElementById('camImg').src = '';
 }
 
 function showTab(id, btn) {
