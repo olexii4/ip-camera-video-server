@@ -7,9 +7,11 @@ import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.*
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -18,9 +20,10 @@ class CameraStreamManager @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     private val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-    private val activeStreams = mutableMapOf<CameraSource, SharedFlow<ByteArray>>()
+    private val activeStreams = ConcurrentHashMap<CameraSource, SharedFlow<ByteArray>>()
     private val handlerThread = HandlerThread("CameraStream").also { it.start() }
     private val handler = Handler(handlerThread.looper)
+    private val scope = CoroutineScope(SupervisorJob())
 
     fun getStream(source: CameraSource): SharedFlow<ByteArray> =
         activeStreams.getOrPut(source) { buildStream(source) }
@@ -81,7 +84,7 @@ class CameraStreamManager @Inject constructor(
                 activeStreams.remove(source)
             }
         }.shareIn(
-            scope = GlobalScope,
+            scope = scope,
             started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000),
             replay = 1,
         )

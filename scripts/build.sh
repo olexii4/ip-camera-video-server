@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Prefer Homebrew JDK 17; fall back to JDK 21 or Android Studio's bundled JDK
-JAVA17_BREW="/opt/homebrew/Cellar/openjdk@17/17.0.19/libexec/openjdk.jdk/Contents/Home"
-JAVA21_BREW="/opt/homebrew/Cellar/openjdk@21/21.0.11/libexec/openjdk.jdk/Contents/Home"
+JAVA17_BREW="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+JAVA21_BREW="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
 AS_JBR="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 if [[ -d "$JAVA17_BREW" ]]; then

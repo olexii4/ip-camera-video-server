@@ -19,6 +19,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         val SERVER_PORT = intPreferencesKey("server_port")
         val ADMIN_USERNAME = stringPreferencesKey("admin_username")
         val ADMIN_PASSWORD_HASH = stringPreferencesKey("admin_password_hash")
+        val ADMIN_PASSWORD_PLAIN = stringPreferencesKey("admin_password_plain")
         val JWT_SECRET = stringPreferencesKey("jwt_secret")
         val SMS_TARGET_NUMBER = stringPreferencesKey("sms_target_number")
         val SMS_SIM_SLOT = intPreferencesKey("sms_sim_slot")
@@ -36,6 +37,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
     val serverPort: Flow<Int> = context.dataStore.data.map { it[Keys.SERVER_PORT] ?: 8080 }
     val adminUsername: Flow<String> = context.dataStore.data.map { it[Keys.ADMIN_USERNAME] ?: "admin" }
     val adminPasswordHash: Flow<String> = context.dataStore.data.map { it[Keys.ADMIN_PASSWORD_HASH] ?: "" }
+    val adminPasswordPlain: Flow<String> = context.dataStore.data.map { it[Keys.ADMIN_PASSWORD_PLAIN] ?: "admin" }
     val jwtSecret: Flow<String> = context.dataStore.data.map { it[Keys.JWT_SECRET] ?: "" }
     val smsTargetNumber: Flow<String> = context.dataStore.data.map { it[Keys.SMS_TARGET_NUMBER] ?: "" }
     val smsSimSlot: Flow<Int> = context.dataStore.data.map { it[Keys.SMS_SIM_SLOT] ?: 0 }
@@ -52,6 +54,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
     suspend fun setServerPort(port: Int) = context.dataStore.edit { it[Keys.SERVER_PORT] = port }
     suspend fun setAdminUsername(name: String) = context.dataStore.edit { it[Keys.ADMIN_USERNAME] = name }
     suspend fun setAdminPasswordHash(hash: String) = context.dataStore.edit { it[Keys.ADMIN_PASSWORD_HASH] = hash }
+    suspend fun setAdminPasswordPlain(plain: String) = context.dataStore.edit { it[Keys.ADMIN_PASSWORD_PLAIN] = plain }
     suspend fun setJwtSecret(secret: String) = context.dataStore.edit { it[Keys.JWT_SECRET] = secret }
     suspend fun setSmsTargetNumber(number: String) = context.dataStore.edit { it[Keys.SMS_TARGET_NUMBER] = number }
     suspend fun setSmsSimSlot(slot: Int) = context.dataStore.edit { it[Keys.SMS_SIM_SLOT] = slot }

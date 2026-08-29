@@ -3,20 +3,28 @@ package com.ipcamera.videoserver.service
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.Intent
-import android.net.wifi.WifiManager
-import android.text.format.Formatter
+import android.net.ConnectivityManager
+import android.net.LinkProperties
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.ipcamera.videoserver.R
 import com.ipcamera.videoserver.archive.ArchiveManager
+import com.ipcamera.videoserver.archive.SegmentRecorder
 import com.ipcamera.videoserver.auth.AuthManager
+import com.ipcamera.videoserver.camera.CameraSource
+import com.ipcamera.videoserver.camera.CameraStreamManager
 import com.ipcamera.videoserver.ftp.FtpServer
 import com.ipcamera.videoserver.network.IpMonitor
 import com.ipcamera.videoserver.server.WebServer
 import com.ipcamera.videoserver.settings.AppSettings
 import com.ipcamera.videoserver.ui.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -33,6 +41,9 @@ class CameraServerService : LifecycleService() {
     @Inject lateinit var webServer: WebServer
     @Inject lateinit var ftpServer: FtpServer
     @Inject lateinit var archiveManager: ArchiveManager
+    @Inject lateinit var cameraStreamManager: CameraStreamManager
+
+    private val archiveJobs = mutableMapOf<CameraSource, Job>()
 
     companion object {
         private val _serverState = MutableStateFlow(false)
@@ -55,9 +66,14 @@ class CameraServerService : LifecycleService() {
             authManager.configure(jwtSecret)
 
             var hash = settings.adminPasswordHash.first()
-            if (hash.isEmpty()) {
-                hash = BCrypt.hashpw("admin", BCrypt.gensalt(10))
+            val plainPassword = if (hash.isEmpty()) {
+                val initial = settings.adminPasswordPlain.first().ifEmpty { "admin" }
+                hash = BCrypt.hashpw(initial, BCrypt.gensalt(10))
                 settings.setAdminPasswordHash(hash)
+                settings.setAdminPasswordPlain(initial)
+                initial
+            } else {
+                settings.adminPasswordPlain.first().ifEmpty { "admin" }
             }
             val username = settings.adminUsername.first()
             authManager.setHashedCredentials(username, hash)
@@ -65,32 +81,60 @@ class CameraServerService : LifecycleService() {
             val port = settings.serverPort.first()
             webServer.start(port)
 
-            val ftpEnabled = settings.ftpEnabled.first()
-            if (ftpEnabled) {
+            if (settings.ftpEnabled.first()) {
                 val ftpPort = settings.ftpPort.first()
-                ftpServer.start(ftpPort, archiveManager.archiveDir, username, "admin")
+                ftpServer.start(ftpPort, archiveManager.archiveDir, username, plainPassword)
             }
 
-            val pollInterval = settings.ipPollIntervalMinutes.first()
-            IpMonitor.schedule(this@CameraServerService, pollInterval.toLong())
+            IpMonitor.schedule(this@CameraServerService, settings.ipPollIntervalMinutes.first().toLong())
 
             _localIp.value = resolveLocalIp()
             _serverState.value = true
+
+            startArchiveIfEnabled(CameraSource.MAIN, settings.archiveEnabledMain.first())
+            startArchiveIfEnabled(CameraSource.FRONT, settings.archiveEnabledFront.first())
+        }
+    }
+
+    private fun startArchiveIfEnabled(source: CameraSource, enabled: Boolean) {
+        if (!enabled) return
+        archiveJobs[source]?.cancel()
+        archiveJobs[source] = lifecycleScope.launch {
+            while (true) {
+                val outputFile = archiveManager.segmentFileName(source)
+                val recorder = SegmentRecorder(this@CameraServerService, source, outputFile)
+                val surface = recorder.prepare()
+                val frameCollectJob = launch {
+                    cameraStreamManager.getStream(source).collect { }
+                }
+                recorder.start()
+                delay(30 * 60 * 1000L)
+                recorder.stop()
+                frameCollectJob.cancel()
+                archiveManager.enforceRotation()
+            }
         }
     }
 
     override fun onDestroy() {
+        archiveJobs.values.forEach { it.cancel() }
+        archiveJobs.clear()
         webServer.stop()
         ftpServer.stop()
+        cameraStreamManager.stopAll()
         IpMonitor.cancel(this)
         _serverState.value = false
         super.onDestroy()
     }
 
-    @Suppress("DEPRECATION")
     private fun resolveLocalIp(): String {
-        val wifi = getSystemService(WIFI_SERVICE) as WifiManager
-        return Formatter.formatIpAddress(wifi.connectionInfo.ipAddress)
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = cm.activeNetwork ?: return ""
+        val props: LinkProperties = cm.getLinkProperties(network) ?: return ""
+        return props.linkAddresses
+            .map { it.address }
+            .firstOrNull { !it.isLoopbackAddress && it.hostAddress?.contains(':') == false }
+            ?.hostAddress ?: ""
     }
 
     private fun buildNotification(): Notification {

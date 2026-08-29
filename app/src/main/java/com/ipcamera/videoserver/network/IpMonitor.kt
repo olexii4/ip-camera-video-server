@@ -6,7 +6,9 @@ import androidx.work.*
 import com.ipcamera.videoserver.settings.AppSettings
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.URL
 import java.util.concurrent.TimeUnit
@@ -39,17 +41,18 @@ class IpMonitor @AssistedInject constructor(
         return Result.success()
     }
 
-    private fun fetchPublicIp(): String? =
+    private suspend fun fetchPublicIp(): String? = withContext(Dispatchers.IO) {
         runCatching {
             val json = URL("https://api64.ipify.org?format=json").readText(Charsets.UTF_8)
             JSONObject(json).getString("ip")
         }.getOrNull()
+    }
 
     companion object {
         private const val WORK_NAME = "ip_monitor"
 
         fun schedule(context: Context, intervalMinutes: Long) {
-            val interval = intervalMinutes.coerceAtLeast(15) // WorkManager minimum is 15 min
+            val interval = intervalMinutes.coerceAtLeast(15)
             val request = PeriodicWorkRequestBuilder<IpMonitor>(interval, TimeUnit.MINUTES)
                 .setConstraints(
                     Constraints.Builder()

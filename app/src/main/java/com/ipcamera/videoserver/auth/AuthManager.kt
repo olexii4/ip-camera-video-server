@@ -4,6 +4,7 @@ import io.jsonwebtoken.JwtException
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
 import org.mindrot.jbcrypt.BCrypt
+import java.security.MessageDigest
 import java.util.Date
 import java.util.UUID
 import javax.inject.Inject
@@ -14,9 +15,9 @@ data class TokenClaims(val username: String, val tokenId: String)
 @Singleton
 class AuthManager @Inject constructor() {
 
-    private var secret: String = ""
-    private var usernameStored: String = ""
-    private var passwordHash: String = ""
+    @Volatile private var secret: String = ""
+    @Volatile private var usernameStored: String = ""
+    @Volatile private var passwordHash: String = ""
 
     fun configure(secret: String) {
         this.secret = secret
@@ -35,9 +36,10 @@ class AuthManager @Inject constructor() {
     fun hashPassword(plain: String): String = BCrypt.hashpw(plain, BCrypt.gensalt(10))
 
     fun issueToken(username: String, password: String): String? {
+        if (secret.isEmpty() || passwordHash.isEmpty()) return null
         if (username != usernameStored) return null
-        if (passwordHash.isEmpty() || !BCrypt.checkpw(password, passwordHash)) return null
-        val key = Keys.hmacShaKeyFor(padSecret(secret).toByteArray())
+        if (!BCrypt.checkpw(password, passwordHash)) return null
+        val key = Keys.hmacShaKeyFor(deriveKey(secret))
         return Jwts.builder()
             .subject(username)
             .id(UUID.randomUUID().toString())
@@ -48,8 +50,9 @@ class AuthManager @Inject constructor() {
     }
 
     fun validateToken(token: String): TokenClaims? {
+        if (secret.isEmpty()) return null
         return try {
-            val key = Keys.hmacShaKeyFor(padSecret(secret).toByteArray())
+            val key = Keys.hmacShaKeyFor(deriveKey(secret))
             val claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).payload
             TokenClaims(username = claims.subject, tokenId = claims.id)
         } catch (_: JwtException) {
@@ -59,6 +62,6 @@ class AuthManager @Inject constructor() {
         }
     }
 
-    private fun padSecret(s: String): String =
-        s.padEnd(32, '0').take(64)
+    private fun deriveKey(s: String): ByteArray =
+        MessageDigest.getInstance("SHA-256").digest(s.toByteArray(Charsets.UTF_8))
 }
