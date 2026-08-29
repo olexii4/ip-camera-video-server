@@ -13,6 +13,7 @@ class SegmentRecorder(
     private val outputFile: File,
 ) {
     private var recorder: MediaRecorder? = null
+    private var started = false
 
     fun prepare(): Surface {
         val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -27,17 +28,26 @@ class SegmentRecorder(
         r.setVideoEncodingBitRate(2_000_000)
         r.setVideoFrameRate(30)
         r.setVideoSize(1280, 720)
+        // Ensure moov atom is written at the start — required by QuickTime/Safari
+        r.setOrientationHint(0)
         r.setOutputFile(outputFile.absolutePath)
         r.prepare()
         recorder = r
         return r.surface
     }
 
-    fun start() { recorder?.start() }
+    fun start() {
+        recorder?.start()
+        started = true
+    }
 
     fun stop() {
-        try { recorder?.stop() } catch (_: Exception) {}
-        recorder?.release()
+        val r = recorder ?: return
         recorder = null
+        if (started) {
+            // Only call stop() if recording actually started; otherwise file would be corrupt
+            try { r.stop() } catch (_: Exception) { outputFile.delete() }
+        }
+        try { r.release() } catch (_: Exception) {}
     }
 }

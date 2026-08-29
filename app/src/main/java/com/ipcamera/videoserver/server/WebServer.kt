@@ -13,11 +13,15 @@ import io.ktor.server.engine.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.server.websocket.*
 import io.ktor.utils.io.*
+import io.ktor.websocket.*
+import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.time.Duration
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -35,6 +39,10 @@ class WebServer @Inject constructor(
 
     fun start(port: Int) {
         server = embeddedServer(CIO, port = port) {
+            install(WebSockets) {
+                pingPeriod = Duration.ofSeconds(15)
+                timeout = Duration.ofSeconds(30)
+            }
             routing {
                 get("/ping") { call.respondText("pong") }
 
@@ -56,9 +64,44 @@ class WebServer @Inject constructor(
                         ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing password")
                     val token = authManager.issueToken(username, password)
                         ?: return@post call.respond(HttpStatusCode.Unauthorized, """{"error":"invalid_credentials"}""")
+                    // Revoke all existing sessions — enforce one concurrent session
+                    sessionRegistry.clearAll()
                     val claims = authManager.validateToken(token)!!
                     sessionRegistry.register(SessionInfo(claims.tokenId, claims.username, call.request.local.remoteAddress))
                     call.respondText(json.encodeToString(TokenResponse(token, "Bearer", 3600)), ContentType.Application.Json)
+                }
+
+                // WebSocket: live status + files, closes when session revoked or server stops
+                webSocket("/ws") {
+                    val bearer = call.request.queryParameters["token"]
+                    val claims = if (authManager.authRequired) {
+                        if (bearer == null) {
+                            close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Unauthorized"))
+                            return@webSocket
+                        }
+                        authManager.validateToken(bearer) ?: run {
+                            close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Unauthorized"))
+                            return@webSocket
+                        }
+                    } else null
+
+                    while (true) {
+                        delay(2_000)
+                        // Close if this session was revoked (e.g. someone else logged in)
+                        if (authManager.authRequired && claims != null &&
+                            sessionRegistry.activeSessions().none { it.tokenId == claims.tokenId }) {
+                            close(CloseReason(CloseReason.Codes.NORMAL, "Session revoked"))
+                            return@webSocket
+                        }
+                        val sessions = sessionRegistry.activeSessions()
+                            .map { SessionDto(it.username, it.remoteAddress, it.connectedAt) }
+                        val files = archiveManager.listFiles()
+                            .map { FileDto(it.name, it.length(), it.lastModified()) }
+                        val msg = json.encodeToString(
+                            WsStatus(running = true, sessions = sessions, files = files)
+                        )
+                        send(Frame.Text(msg))
+                    }
                 }
 
                 // Returns which camera sources are physically present on this device
@@ -159,6 +202,7 @@ class WebServer @Inject constructor(
 @Serializable private data class StatusResponse(val running: Boolean, val activeSessions: List<SessionDto>)
 @Serializable private data class SessionDto(val username: String, val remoteAddress: String, val connectedAt: Long)
 @Serializable private data class FileDto(val name: String, val size: Long, val modified: Long)
+@Serializable private data class WsStatus(val running: Boolean, val sessions: List<SessionDto>, val files: List<FileDto>)
 
 private val WEB_UI_HTML = """
 <!DOCTYPE html>
@@ -314,7 +358,7 @@ input:focus{border-color:var(--accent)}
 </div>
 
 <script>
-let TOKEN='', SOURCES=[], activeSource=null, expandedSource=null, switching=false;
+let TOKEN='', SOURCES=[], activeSource=null, expandedSource=null, switching=false, ws=null;
 
 window.addEventListener('DOMContentLoaded', async ()=>{
   const cfg = await fetch('/auth-config').then(r=>r.json()).catch(()=>({authRequired:true}));
@@ -337,9 +381,47 @@ async function enterApp(){
   document.getElementById('loginPage').style.display='none';
   document.getElementById('appShell').style.display='block';
   await loadCameras();
+  connectWs();
 }
 
 function authHeader(){ return TOKEN ? {Authorization:'Bearer '+TOKEN} : {}; }
+
+// ── WEBSOCKET ──
+function connectWs(){
+  if(ws){ ws.close(); ws=null; }
+  const proto=location.protocol==='https:'?'wss:':'ws:';
+  const url=proto+'//'+location.host+'/ws'+(TOKEN?'?token='+TOKEN:'');
+  ws=new WebSocket(url);
+
+  ws.onmessage=function(e){
+    try{
+      const msg=JSON.parse(e.data);
+      updateStatus(msg);
+      if(document.getElementById('files').classList.contains('on')) renderFiles(msg.files);
+    }catch(_){}
+  };
+
+  ws.onclose=function(ev){
+    ws=null;
+    // Normal server stop (code 1000/1001) or session revoked (1008) → back to login
+    if(activeSource){ try{document.getElementById('img_'+activeSource).src='';}catch(_){} }
+    activeSource=null; expandedSource=null;
+    document.getElementById('appShell').style.display='none';
+    document.getElementById('loginPage').style.display='block';
+    document.getElementById('loginErr').textContent=ev.code===1008?'Session revoked — another user logged in':'Server disconnected';
+  };
+
+  ws.onerror=function(){
+    // will trigger onclose
+  };
+}
+
+function updateStatus(msg){
+  const dot=document.getElementById('liveDot');
+  if(dot) dot.className='logo-dot'+(msg.running?'':' off');
+}
+
+// ── CAMERAS (unchanged) ──
 
 // ── CAMERAS ──
 async function loadCameras(){
@@ -452,14 +534,28 @@ function setHint(src,text){ document.getElementById('hint_'+src).textContent=tex
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
 // ── FILES ──
-async function loadFiles(){
-  const list=document.getElementById('fileList'); list.innerHTML='<div class="empty-state">Loading…</div>';
-  const r=await fetch('/files',{headers:authHeader()});
-  if(!r.ok){list.innerHTML='<div class="empty-state">Error loading files</div>';return;}
-  const files=await r.json();
+var cachedFiles=[];
+
+function loadFiles(){
+  // Show cached WS data immediately; fall back to HTTP if not yet available
+  if(cachedFiles.length>0){ renderFiles(cachedFiles); return; }
+  const list=document.getElementById('fileList');
+  list.innerHTML='<div class="empty-state">Loading…</div>';
+  fetch('/files',{headers:authHeader()})
+    .then(function(r){ return r.ok?r.json():Promise.reject(r); })
+    .then(function(files){ renderFiles(files); })
+    .catch(function(){ list.innerHTML='<div class="empty-state">Error loading files</div>'; });
+}
+
+function renderFiles(files){
+  cachedFiles=files;
   document.getElementById('fileCount').textContent=files.length+' recording'+(files.length!==1?'s':'');
-  if(!files.length){list.innerHTML='<div class="empty-state">No recordings yet.<br>Enable archive recording in Settings.</div>';return;}
-  list.innerHTML='<div class="file-list">'+files.map(f=>{
+  const list=document.getElementById('fileList');
+  if(!files.length){
+    list.innerHTML='<div class="empty-state">No recordings yet.<br>Enable archive recording in Settings.</div>';
+    return;
+  }
+  list.innerHTML='<div class="file-list">'+files.map(function(f){
     const mb=(f.size/1048576).toFixed(1);
     const date=new Date(f.modified).toLocaleString();
     const enc=encodeURIComponent(f.name);
@@ -476,7 +572,7 @@ async function loadFiles(){
 async function deleteFile(name){
   if(!confirm('Delete '+name+'?')) return;
   const r=await fetch('/files/delete/'+encodeURIComponent(name),{method:'POST',headers:authHeader()});
-  if(r.ok) loadFiles(); else alert('Delete failed');
+  if(r.ok){ cachedFiles=[]; loadFiles(); } else alert('Delete failed');
 }
 
 // ── NAV ──
@@ -489,9 +585,11 @@ function showTab(id,btn){
 }
 
 async function logout(){
-  if(activeSource){ document.getElementById('img_'+activeSource).src=''; }
+  if(activeSource){ try{document.getElementById('img_'+activeSource).src='';}catch(_){} }
+  if(ws){ ws.onclose=null; ws.close(); ws=null; }
   await fetch('/logout',{method:'POST',headers:authHeader()}).catch(()=>{});
-  TOKEN=''; activeSource=null; expandedSource=null;
+  TOKEN=''; activeSource=null; expandedSource=null; cachedFiles=[];
+  document.getElementById('loginErr').textContent='';
   document.getElementById('appShell').style.display='none';
   document.getElementById('loginPage').style.display='block';
 }
