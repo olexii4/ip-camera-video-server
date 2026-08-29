@@ -111,15 +111,23 @@ class CameraServerService : LifecycleService() {
         archiveJobs[source]?.cancel()
         archiveJobs[source] = lifecycleScope.launch {
             while (true) {
+                // Wait until someone is actively streaming this camera
+                while (!cameraStreamManager.isStreaming(source)) {
+                    delay(3_000L)
+                }
                 var recorder: SegmentRecorder? = null
                 runCatching {
                     val outputFile = archiveManager.segmentFileName(source)
                     recorder = SegmentRecorder(this@CameraServerService, source, outputFile)
                     val surface = recorder!!.prepare()
-                    // Register the recorder surface with Camera2 so frames are actually written
                     cameraStreamManager.setRecordingSurface(source, surface)
                     recorder!!.start()
-                    delay(30 * 60 * 1000L)
+                    // Record for 30 min or until nobody is watching
+                    var elapsed = 0L
+                    while (elapsed < 30 * 60 * 1000L && cameraStreamManager.isStreaming(source)) {
+                        delay(5_000L)
+                        elapsed += 5_000L
+                    }
                     recorder!!.stop()
                     cameraStreamManager.setRecordingSurface(source, null)
                     archiveManager.enforceRotation()
@@ -127,7 +135,7 @@ class CameraServerService : LifecycleService() {
                     runCatching { recorder?.stop() }
                     cameraStreamManager.setRecordingSurface(source, null)
                 }
-                delay(5_000L)
+                delay(2_000L)
             }
         }
     }

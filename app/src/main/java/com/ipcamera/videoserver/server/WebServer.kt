@@ -127,7 +127,7 @@ class WebServer @Inject constructor(
                         ?: return@get call.respond(HttpStatusCode.NotFound, "Unknown source: $sourceId")
                     call.response.header(HttpHeaders.CacheControl, "no-cache")
                     call.respondBytesWriter(contentType = ContentType.parse("multipart/x-mixed-replace; boundary=$BOUNDARY")) {
-                        cameraStreamManager.getStream(source).collect { jpegBytes ->
+                        cameraStreamManager.getStreamExclusive(source).collect { jpegBytes ->
                             writeStringUtf8("--$BOUNDARY\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpegBytes.size}\r\n\r\n")
                             writeFully(jpegBytes)
                             writeStringUtf8("\r\n")
@@ -272,25 +272,36 @@ input:focus{border-color:var(--accent)}
 .cam-tile.expanded{
   grid-column:1/-1;
 }
-.cam-tile.expanded .cam-frame{max-height:70vh}
 .cam-header{
   display:flex;align-items:center;gap:8px;padding:8px 12px;
-  background:rgba(0,0,0,.4);position:absolute;top:0;left:0;right:0;z-index:2;
+  background:rgba(0,0,0,.5);position:absolute;top:0;left:0;right:0;z-index:2;
 }
 .cam-name{font-size:.78rem;font-weight:500;flex:1}
 .cam-badge{font-size:.68rem;padding:2px 7px;border-radius:10px;font-weight:600}
 .cam-badge.live{background:rgba(34,197,94,.15);color:var(--green)}
 .cam-badge.off{background:rgba(107,114,128,.12);color:var(--muted)}
-.cam-expand-hint{font-size:.7rem;color:var(--muted)}
+.cam-expbtn{
+  display:flex;align-items:center;gap:4px;background:none;border:1px solid rgba(255,255,255,.2);
+  color:rgba(255,255,255,.75);border-radius:5px;padding:3px 8px;cursor:pointer;
+  font-size:.7rem;transition:all .15s;
+}
+.cam-expbtn:hover{background:rgba(255,255,255,.1);color:#fff}
+.cam-expbtn svg{width:10px;height:10px}
 .cam-frame{
-  width:100%;display:block;aspect-ratio:16/9;object-fit:cover;
-  background:#050810;min-height:120px;transition:max-height .25s ease;
+  width:100%;display:block;object-fit:cover;background:#050810;
+  max-height:20vh;
+  transition:max-height .25s ease;
+}
+.cam-tile.expanded .cam-frame{
+  max-height:60vh;
+  max-width:100%;
 }
 .cam-placeholder{
-  aspect-ratio:16/9;display:flex;flex-direction:column;
+  height:20vh;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:8px;
-  background:#050810;color:var(--muted);min-height:120px;
+  background:#050810;color:var(--muted);
 }
+.cam-tile.expanded .cam-placeholder{height:60vh}
 .cam-placeholder svg{opacity:.35}
 .cam-placeholder span{font-size:.8rem}
 .cam-spinner{
@@ -298,6 +309,7 @@ input:focus{border-color:var(--accent)}
   border-radius:50%;animation:spin .7s linear infinite;
 }
 @keyframes spin{to{transform:rotate(360deg)}}
+#camGrid{max-width:100%;overflow:hidden}
 
 /* ── FILES ── */
 #fileTools{display:flex;gap:8px;margin-bottom:12px;align-items:center}
@@ -431,6 +443,9 @@ async function loadCameras(){
   if(SOURCES.length>0) activateCamera(SOURCES[0]);
 }
 
+var SVG_EXPAND='<svg viewBox="0 0 448 512" fill="currentColor"><path d="M0 180V56c0-13.3 10.7-24 24-24h124c6.6 0 12 5.4 12 12v40c0 6.6-5.4 12-12 12H64v84c0 6.6-5.4 12-12 12H12c-6.6 0-12-5.4-12-12zM288 44v40c0 6.6 5.4 12 12 12h84v84c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12V56c0-13.3-10.7-24-24-24H300c-6.6 0-12 5.4-12 12zm148 276h-40c-6.6 0-12 5.4-12 12v84h-84c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h124c13.3 0 24-10.7 24-24V332c0-6.6-5.4-12-12-12zM160 468v-40c0-6.6-5.4-12-12-12H64v-84c0-6.6-5.4-12-12-12H12c-6.6 0-12 5.4-12 12v124c0 13.3 10.7 24 24 24h124c6.6 0 12-5.4 12-12z"/></svg>';
+var SVG_COMPRESS='<svg viewBox="0 0 448 512" fill="currentColor"><path d="M436 192H312c-13.3 0-24-10.7-24-24V44c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v84h84c6.6 0 12 5.4 12 12v40c0 6.6-5.4 12-12 12zm-276-24V44c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v84H12c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h124c13.3 0 24-10.7 24-24zm0 300V344c0-13.3-10.7-24-24-24H12c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h84v84c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm192 0v-84h84c6.6 0 12-5.4 12-12v-40c0-6.6-5.4-12-12-12H312c-13.3 0-24 10.7-24 24v124c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12z"/></svg>';
+
 function renderGrid(){
   const grid=document.getElementById('camGrid');
   grid.innerHTML=SOURCES.map(function(src){
@@ -439,7 +454,8 @@ function renderGrid(){
       +'<div class="cam-header">'
       +'<span class="cam-name">'+label+'</span>'
       +'<span class="cam-badge off" id="badge_'+src+'">Inactive</span>'
-      +'<span class="cam-expand-hint" id="hint_'+src+'"></span>'
+      +'<button class="cam-expbtn" id="expbtn_'+src+'" style="display:none" onclick="event.stopPropagation();toggleExpand(\''+src+'\')">'
+      +SVG_EXPAND+'<span id="expbtnlabel_'+src+'">Expand</span></button>'
       +'</div>'
       +'<div class="cam-placeholder" id="ph_'+src+'">'
       +'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">'
@@ -468,16 +484,19 @@ async function activateCamera(src){
     const oldImg=document.getElementById('img_'+activeSource);
     oldImg.src=''; oldImg.style.display='none';
     document.getElementById('ph_'+activeSource).style.display='flex';
+    document.getElementById('ph_'+activeSource).innerHTML=
+      '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">'
+      +'<path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>'
+      +'</svg><span>Click to view</span>';
     setBadge(activeSource,'off','Inactive');
-    setHint(activeSource,'');
+    document.getElementById('expbtn_'+activeSource).style.display='none';
     document.getElementById('tile_'+activeSource).classList.remove('active');
-    // collapse if it was expanded
     if(expandedSource===activeSource){
       document.getElementById('tile_'+activeSource).classList.remove('expanded');
       expandedSource=null;
     }
-    // wait for camera hardware to release
-    await sleep(500);
+    // wait for camera hardware to release (server waits up to 3s anyway)
+    await sleep(800);
   }
 
   activeSource=src;
@@ -491,17 +510,17 @@ async function activateCamera(src){
   ph.style.display='flex';
   img.style.display='none';
 
-  img.onload=()=>{
+  img.onload=function(){
     ph.style.display='none'; img.style.display='block';
     setBadge(src,'live','● Live');
-    setHint(src,'Click to expand');
+    document.getElementById('expbtn_'+src).style.display='flex';
     document.getElementById('liveDot').classList.remove('off');
     switching=false;
   };
-  img.onerror=()=>{
+  img.onerror=function(){
     ph.innerHTML='<span style="color:#ef4444;font-size:.8rem">⚠ Stream unavailable</span>';
     setBadge(src,'off','Error');
-    setHint(src,'');
+    document.getElementById('expbtn_'+src).style.display='none';
     document.getElementById('liveDot').classList.add('off');
     switching=false;
   };
@@ -510,16 +529,20 @@ async function activateCamera(src){
 
 function toggleExpand(src){
   const tile=document.getElementById('tile_'+src);
+  const btn=document.getElementById('expbtn_'+src);
+  const lbl=document.getElementById('expbtnlabel_'+src);
   if(expandedSource===src){
     tile.classList.remove('expanded');
-    setHint(src,'Click to expand');
+    btn.innerHTML=SVG_EXPAND+'<span id="expbtnlabel_'+src+'">Expand</span>';
     expandedSource=null;
   } else {
     if(expandedSource){
-      document.getElementById('tile_'+expandedSource).classList.remove('expanded');
+      const old=document.getElementById('tile_'+expandedSource);
+      old.classList.remove('expanded');
+      document.getElementById('expbtn_'+expandedSource).innerHTML=SVG_EXPAND+'<span id="expbtnlabel_'+expandedSource+'">Expand</span>';
     }
     tile.classList.add('expanded');
-    setHint(src,'Click to collapse');
+    btn.innerHTML=SVG_COMPRESS+'<span id="expbtnlabel_'+src+'">Compress</span>';
     expandedSource=src;
     tile.scrollIntoView({behavior:'smooth',block:'nearest'});
   }
@@ -530,7 +553,6 @@ function setBadge(src,cls,text){
   b.className='cam-badge'+(cls?' '+cls:'');
   b.textContent=text;
 }
-function setHint(src,text){ document.getElementById('hint_'+src).textContent=text; }
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
 // ── FILES ──

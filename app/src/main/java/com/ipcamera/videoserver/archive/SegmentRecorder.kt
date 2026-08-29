@@ -26,10 +26,9 @@ class SegmentRecorder(
         r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
         r.setVideoEncoder(MediaRecorder.VideoEncoder.H264)
         r.setVideoEncodingBitRate(2_000_000)
-        r.setVideoFrameRate(30)
+        r.setVideoFrameRate(25)
         r.setVideoSize(1280, 720)
-        // Ensure moov atom is written at the start — required by QuickTime/Safari
-        r.setOrientationHint(0)
+        r.setOrientationHint(90) // portrait phones — rotate so macOS/iOS plays correctly
         r.setOutputFile(outputFile.absolutePath)
         r.prepare()
         recorder = r

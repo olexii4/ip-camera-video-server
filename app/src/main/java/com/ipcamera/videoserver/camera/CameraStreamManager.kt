@@ -11,6 +11,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -25,17 +26,26 @@ class CameraStreamManager @Inject constructor(
     private val handlerThread = HandlerThread("CameraStream").also { it.start() }
     private val handler = Handler(handlerThread.looper)
     private val scope = CoroutineScope(SupervisorJob())
-
-    // extraSurfaces are additional targets (e.g. MediaRecorder surface) added to the Camera2 session
     private val extraSurfaces = ConcurrentHashMap<CameraSource, Surface>()
 
-    fun getStream(source: CameraSource): SharedFlow<ByteArray> =
-        activeStreams.getOrPut(source) { buildStream(source) }
+    /** Returns true while this source's camera is open and has at least one subscriber. */
+    fun isStreaming(source: CameraSource): Boolean = activeStreams.containsKey(source)
+
+    /** Waits until all cameras for OTHER sources are closed, then returns the stream.
+     *  Prevents Camera2 "max cameras in use" errors when switching between cameras. */
+    suspend fun getStreamExclusive(source: CameraSource): SharedFlow<ByteArray> {
+        var waited = 0
+        while (waited < 3_000) {
+            if (activeStreams.keys.none { it != source }) break
+            delay(150)
+            waited += 150
+        }
+        return activeStreams.getOrPut(source) { buildStream(source) }
+    }
 
     fun setRecordingSurface(source: CameraSource, surface: Surface?) {
         if (surface != null) extraSurfaces[source] = surface
         else extraSurfaces.remove(source)
-        // Invalidate the active stream so it rebuilds with the new surface set
         activeStreams.remove(source)
     }
 
