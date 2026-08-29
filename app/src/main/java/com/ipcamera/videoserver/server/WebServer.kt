@@ -34,6 +34,11 @@ class WebServer @Inject constructor(
             routing {
                 get("/ping") { call.respondText("pong") }
 
+                // Browser-friendly login page
+                get("/") {
+                    call.respondText(WEB_UI_HTML, ContentType.Text.Html)
+                }
+
                 post("/oauth/token") {
                     val params = call.receiveParameters()
                     val username = params["username"]
@@ -62,7 +67,9 @@ class WebServer @Inject constructor(
                 }
 
                 get("/stream/{source}") {
+                    // Accept token from Authorization header OR ?token= query param
                     val bearer = extractBearer(call)
+                        ?: call.request.queryParameters["token"]
                         ?: return@get call.respond(HttpStatusCode.Unauthorized)
                     authManager.validateToken(bearer)
                         ?: return@get call.respond(HttpStatusCode.Unauthorized)
@@ -88,6 +95,7 @@ class WebServer @Inject constructor(
 
                 get("/status") {
                     val bearer = extractBearer(call)
+                        ?: call.request.queryParameters["token"]
                         ?: return@get call.respond(HttpStatusCode.Unauthorized)
                     authManager.validateToken(bearer)
                         ?: return@get call.respond(HttpStatusCode.Unauthorized)
@@ -124,3 +132,68 @@ private data class StatusResponse(val running: Boolean, val activeSessions: List
 
 @Serializable
 private data class SessionDto(val username: String, val remoteAddress: String, val connectedAt: Long)
+
+private val WEB_UI_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IP Camera Server</title>
+<style>
+  body{font-family:sans-serif;background:#0d1117;color:#e6edf3;margin:0;padding:24px}
+  h1{font-size:1.4rem;margin-bottom:20px}
+  input{width:100%;box-sizing:border-box;padding:10px;margin:6px 0 14px;background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:1rem}
+  button{width:100%;padding:10px;background:#238636;color:#fff;border:none;border-radius:6px;font-size:1rem;cursor:pointer}
+  button:hover{background:#2ea043}
+  .streams{display:none;margin-top:24px}
+  .stream-box{margin-bottom:24px}
+  .stream-box h3{margin:0 0 8px;font-size:0.9rem;color:#8b949e;text-transform:uppercase}
+  img.stream{width:100%;border-radius:8px;background:#161b22;min-height:120px}
+  #msg{margin-top:12px;color:#f85149;font-size:0.9rem}
+  a.copy{font-size:0.75rem;color:#58a6ff;text-decoration:none;margin-left:8px}
+</style>
+</head>
+<body>
+<h1>📷 IP Camera Server</h1>
+<form id="loginForm">
+  <label>Username</label>
+  <input id="user" type="text" value="admin" autocomplete="username">
+  <label>Password</label>
+  <input id="pass" type="password" value="admin" autocomplete="current-password">
+  <button type="submit">Connect</button>
+  <div id="msg"></div>
+</form>
+<div class="streams" id="streams">
+  <div class="stream-box">
+    <h3>Main camera <a class="copy" id="mainLink" href="#">copy URL</a></h3>
+    <img class="stream" id="imgMain" alt="main camera">
+  </div>
+  <div class="stream-box">
+    <h3>Front camera <a class="copy" id="frontLink" href="#">copy URL</a></h3>
+    <img class="stream" id="imgFront" alt="front camera">
+  </div>
+</div>
+<script>
+document.getElementById('loginForm').onsubmit = async e => {
+  e.preventDefault();
+  const msg = document.getElementById('msg');
+  msg.textContent = '';
+  const body = new URLSearchParams({username: document.getElementById('user').value, password: document.getElementById('pass').value});
+  const r = await fetch('/oauth/token', {method:'POST', body});
+  if (!r.ok) { msg.textContent = 'Login failed'; return; }
+  const {access_token} = await r.json();
+  const base = window.location.origin;
+  const mainUrl = base + '/stream/main?token=' + access_token;
+  const frontUrl = base + '/stream/front?token=' + access_token;
+  document.getElementById('imgMain').src = mainUrl;
+  document.getElementById('imgFront').src = frontUrl;
+  document.getElementById('mainLink').onclick = e => { e.preventDefault(); navigator.clipboard.writeText(mainUrl); };
+  document.getElementById('frontLink').onclick = e => { e.preventDefault(); navigator.clipboard.writeText(frontUrl); };
+  document.getElementById('loginForm').style.display = 'none';
+  document.getElementById('streams').style.display = 'block';
+};
+</script>
+</body>
+</html>
+""".trimIndent()
