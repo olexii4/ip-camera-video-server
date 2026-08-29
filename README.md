@@ -46,7 +46,15 @@ JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.19/libexec/openjdk.jdk/Contents/H
 
 ## Connecting to the server
 
-Huawei's firewall blocks incoming WiFi TCP connections by default. The reliable path is USB port forwarding:
+Huawei's firewall blocks incoming WiFi TCP connections by default. Two options:
+
+**Option A — disable the firewall on the phone (persistent):**
+
+Settings → Developer options → Disable WiFi firewall restrictions
+
+Then connect directly via the device's WiFi IP (shown on the Status screen).
+
+**Option B — USB port forward (no phone setting needed):**
 
 ```bash
 ~/Library/Android/sdk/platform-tools/adb forward tcp:8080 tcp:8080
