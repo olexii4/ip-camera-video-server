@@ -29,7 +29,6 @@ fun SettingsScreen(vm: AppViewModel) {
     val ftpEnabled by vm.settings.ftpEnabled.collectAsState(initial = false)
     val ftpPort by vm.settings.ftpPort.collectAsState(initial = 2121)
     val ftpsEnabled by vm.settings.ftpsEnabled.collectAsState(initial = false)
-    val ftpsPort by vm.settings.ftpsPort.collectAsState(initial = 2122)
     val startOnBoot by vm.settings.serverStartedOnBoot.collectAsState(initial = false)
 
     // Local draft state for fields that need explicit Save
@@ -40,7 +39,6 @@ fun SettingsScreen(vm: AppViewModel) {
     var draftMaxFiles by remember(archiveMaxFiles) { mutableStateOf(archiveMaxFiles.toString()) }
     var draftMaxSizeGb by remember(archiveMaxSizeGb) { mutableStateOf(archiveMaxSizeGb.toString()) }
     var draftFtpPort by remember(ftpPort) { mutableStateOf(ftpPort.toString()) }
-    var draftFtpsPort by remember(ftpsPort) { mutableStateOf(ftpsPort.toString()) }
 
     var savedSnack by remember { mutableStateOf(false) }
 
@@ -93,35 +91,46 @@ fun SettingsScreen(vm: AppViewModel) {
         DraftTextField("Max files", draftMaxFiles, KeyboardType.Number) { draftMaxFiles = it }
         DraftTextField("Max storage (GB)", draftMaxSizeGb, KeyboardType.Number) { draftMaxSizeGb = it }
 
-        SectionHeader("FTP Server (unencrypted)")
+        SectionHeader("FTP Server")
         LabeledSwitch("FTP enabled", ftpEnabled) {
             scope.launch { vm.settings.setFtpEnabled(it) }
         }
-        DraftTextField("FTP port", draftFtpPort, KeyboardType.Number) { draftFtpPort = it }
         if (ftpEnabled) {
-            Text(
-                "⚠ FTP transmits data unencrypted. Use on trusted networks only.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
-
-        SectionHeader("FTPS Server (encrypted)")
-        LabeledSwitch("FTPS enabled", ftpsEnabled) {
-            scope.launch { vm.settings.setFtpsEnabled(it) }
-        }
-        DraftTextField("FTPS port", draftFtpsPort, KeyboardType.Number) { draftFtpsPort = it }
-        if (ftpsEnabled) {
-            Text(
-                "Certificate fingerprint (SHA-256) — verify in your FTP client:",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                vm.tlsFingerprint,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            LabeledSwitch("Use FTPS (encrypted)", ftpsEnabled) {
+                scope.launch {
+                    vm.settings.setFtpsEnabled(it)
+                    // Auto-switch default port unless user already overrode it
+                    val currentPort = draftFtpPort.toIntOrNull()
+                    if (it && currentPort == 2121) draftFtpPort = "2122"
+                    else if (!it && currentPort == 2122) draftFtpPort = "2121"
+                }
+            }
+            DraftTextField("Port", draftFtpPort, KeyboardType.Number) { draftFtpPort = it }
+            if (!ftpsEnabled) {
+                Text(
+                    "⚠ Plain FTP transmits data unencrypted. Use on trusted networks only.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            if (ftpsEnabled) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "TLS certificate SHA-256 fingerprint",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    vm.tlsFingerprint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    "Enter this in your FTP client to verify the server identity.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         Spacer(Modifier.height(8.dp))
@@ -134,7 +143,6 @@ fun SettingsScreen(vm: AppViewModel) {
                     draftMaxFiles.toIntOrNull()?.let { vm.settings.setArchiveMaxFiles(it) }
                     draftMaxSizeGb.toIntOrNull()?.let { vm.settings.setArchiveMaxSizeGb(it) }
                     draftFtpPort.toIntOrNull()?.let { vm.settings.setFtpPort(it) }
-                    draftFtpsPort.toIntOrNull()?.let { vm.settings.setFtpsPort(it) }
                     if (draftUsername.isNotBlank()) vm.settings.setAdminUsername(draftUsername)
                     if (draftPassword.isNotEmpty()) {
                         val hash = vm.hashPassword(draftPassword)

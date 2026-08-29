@@ -29,7 +29,9 @@ class CameraStreamManager @Inject constructor(
     private val extraSurfaces = ConcurrentHashMap<CameraSource, Surface>()
 
     /** Returns true while this source's camera is open and has at least one subscriber. */
-    fun isStreaming(source: CameraSource): Boolean = activeStreams.containsKey(source)
+    // True while camera is open for streaming OR while the recorder surface is attached
+    fun isStreaming(source: CameraSource): Boolean =
+        activeStreams.containsKey(source) || extraSurfaces.containsKey(source)
 
     /** Waits until all cameras for OTHER sources are closed, then returns the stream.
      *  Prevents Camera2 "max cameras in use" errors when switching between cameras. */

@@ -256,60 +256,61 @@ input:focus{border-color:var(--accent)}
 #loginBtn{width:100%;margin-top:16px;justify-content:center}
 
 /* ── CAMERA GRID ── */
+#camArea{overflow-x:hidden}
 #camGrid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));
-  gap:10px;
-  align-items:start;
+  display:flex;flex-wrap:wrap;gap:10px;
+  margin-bottom:10px;
 }
 .cam-tile{
+  width:350px;flex-shrink:0;
   background:var(--surface);border:2px solid var(--border);border-radius:10px;
-  overflow:hidden;cursor:pointer;transition:border-color .2s,transform .15s;
+  overflow:hidden;cursor:pointer;transition:border-color .2s;
   position:relative;
 }
 .cam-tile:hover{border-color:var(--border2)}
 .cam-tile.active{border-color:var(--accent)}
-.cam-tile.expanded{
-  grid-column:1/-1;
-}
 .cam-header{
-  display:flex;align-items:center;gap:8px;padding:8px 12px;
-  background:rgba(0,0,0,.5);position:absolute;top:0;left:0;right:0;z-index:2;
+  display:flex;align-items:center;gap:8px;padding:6px 10px;
+  background:rgba(0,0,0,.55);position:absolute;top:0;left:0;right:0;z-index:2;
 }
-.cam-name{font-size:.78rem;font-weight:500;flex:1}
-.cam-badge{font-size:.68rem;padding:2px 7px;border-radius:10px;font-weight:600}
-.cam-badge.live{background:rgba(34,197,94,.15);color:var(--green)}
-.cam-badge.off{background:rgba(107,114,128,.12);color:var(--muted)}
+.cam-name{font-size:.76rem;font-weight:500;flex:1}
+.cam-badge{font-size:.66rem;padding:2px 7px;border-radius:10px;font-weight:600}
+.cam-badge.live{background:rgba(34,197,94,.18);color:var(--green)}
+.cam-badge.off{background:rgba(107,114,128,.15);color:var(--muted)}
+.cam-badge.usb{background:rgba(245,158,11,.15);color:var(--amber)}
 .cam-expbtn{
   display:flex;align-items:center;gap:4px;background:none;border:1px solid rgba(255,255,255,.2);
   color:rgba(255,255,255,.75);border-radius:5px;padding:3px 8px;cursor:pointer;
-  font-size:.7rem;transition:all .15s;
+  font-size:.68rem;transition:all .15s;
 }
 .cam-expbtn:hover{background:rgba(255,255,255,.1);color:#fff}
 .cam-expbtn svg{width:10px;height:10px}
-.cam-frame{
-  width:100%;display:block;object-fit:cover;background:#050810;
-  max-height:20vh;
-  transition:max-height .25s ease;
-}
-.cam-tile.expanded .cam-frame{
-  max-height:60vh;
-  max-width:100%;
-}
+.cam-frame{width:350px;height:200px;display:block;object-fit:cover;background:#050810;}
 .cam-placeholder{
-  height:20vh;display:flex;flex-direction:column;
+  width:350px;height:200px;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:8px;
   background:#050810;color:var(--muted);
 }
-.cam-tile.expanded .cam-placeholder{height:60vh}
 .cam-placeholder svg{opacity:.35}
-.cam-placeholder span{font-size:.8rem}
+.cam-placeholder span{font-size:.8rem;text-align:center;padding:0 16px}
 .cam-spinner{
   width:28px;height:28px;border:2px solid var(--border2);border-top-color:var(--accent);
   border-radius:50%;animation:spin .7s linear infinite;
 }
 @keyframes spin{to{transform:rotate(360deg)}}
-#camGrid{max-width:100%;overflow:hidden}
+/* Expanded panel — full width row below the grid tiles */
+#expandedPanel{
+  display:none;width:100%;background:var(--surface);
+  border:2px solid var(--accent);border-radius:10px;
+  overflow:hidden;position:relative;
+}
+#expandedPanel img{width:100%;height:60vh;object-fit:contain;background:#050810;display:block}
+#expandedPanel .exp-header{
+  display:flex;align-items:center;gap:8px;padding:8px 14px;
+  background:rgba(0,0,0,.6);position:absolute;top:0;left:0;right:0;z-index:2;
+  font-size:.82rem;font-weight:500;
+}
+#expandedPanel .exp-header span{flex:1}
 
 /* ── FILES ── */
 #fileTools{display:flex;gap:8px;margin-bottom:12px;align-items:center}
@@ -352,12 +353,24 @@ input:focus{border-color:var(--accent)}
     <nav>
       <button class="tab on" onclick="showTab('cameras',this)">Cameras</button>
       <button class="tab" onclick="showTab('files',this)">Files</button>
-      <button class="tab logout" onclick="logout()">⏏ Logout</button>
+      <button class="tab logout" onclick="logout()" title="Logout"><svg width="16" height="16" viewBox="0 0 90 90" fill="currentColor"><path d="M69.313 54.442c-.397 0-.798-.118-1.147-.363-.904-.636-1.122-1.883-.487-2.786l10.118-14.399L67.679 22.495c-.635-.904-.417-2.151.487-2.786.904-.637 2.151-.417 2.786.486l10.926 15.549c.484.69.484 1.61 0 2.3L70.952 53.592c-.389.554-1.009.85-1.639.85z"/><path d="M57.693 30.092c1.104 0 2-.896 2-2V2c0-1.104-.896-2-2-2H9.759c-.037 0-.074.004-.111.007-.354.025-.639.126-.89.213-.196.05-.397.13-.523.197-.025.014-.054.019-.077.034l-.031.025a1.985 1.985 0 0 0-.36.287C8.313.62 8.299.643 8.281.662A1.985 1.985 0 0 0 7.82 1.532C7.783 1.683 7.759 1.838 7.759 2v69.787c0 .17.028.333.068.49.011.043.025.083.039.124.04.123.091.239.152.35.019.033.034.068.054.1.086.135.185.26.3.371.022.021.047.037.07.058.102.09.214.169.333.237.021.012.037.03.058.042l31.016 16.213C40.139 89.925 40.457 90 40.775 90c.359 0 .718-.097 1.036-.289.598-.362.964-1.012.964-1.711V73.787h14.918c1.104 0 2-.896 2-2V45c0-1.104-.896-2-2-2s-2 .896-2 2v24.787H42.775V18.213c0-.745-.414-1.428-1.074-1.772L17.902 4h37.791v24.092c0 1.104.896 2 2 2z"/><path d="M80.241 38.894H47.536c-1.104 0-2-.896-2-2s.896-2 2-2h32.705c1.104 0 2 .896 2 2s-.896 2-2 2z"/></svg></button>
     </nav>
   </header>
 
   <div id="cameras" class="page on">
-    <div id="camGrid"></div>
+    <div id="camArea">
+      <div id="camGrid"></div>
+      <div id="expandedPanel">
+        <div class="exp-header">
+          <span id="expTitle"></span>
+          <button class="cam-expbtn" onclick="compressPanel()">
+            <svg viewBox="0 0 448 512" fill="currentColor"><path d="M436 192H312c-13.3 0-24-10.7-24-24V44c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v84h84c6.6 0 12 5.4 12 12v40c0 6.6-5.4 12-12 12zm-276-24V44c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v84H12c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h124c13.3 0 24-10.7 24-24zm0 300V344c0-13.3-10.7-24-24-24H12c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h84v84c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm192 0v-84h84c6.6 0 12-5.4 12-12v-40c0-6.6-5.4-12-12-12H312c-13.3 0-24 10.7-24 24v124c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12z"/></svg>
+            Compress
+          </button>
+        </div>
+        <img id="expImg" alt="expanded stream">
+      </div>
+    </div>
   </div>
 
   <div id="files" class="page">
@@ -438,29 +451,40 @@ function updateStatus(msg){
 // ── CAMERAS ──
 async function loadCameras(){
   const r=await fetch('/cameras',{headers:authHeader()});
-  SOURCES=r.ok?await r.json():['main','front'];
+  SOURCES=r.ok?await r.json():['main'];
   renderGrid();
+  // Auto-activate first available camera
   if(SOURCES.length>0) activateCamera(SOURCES[0]);
 }
 
 var SVG_EXPAND='<svg viewBox="0 0 448 512" fill="currentColor"><path d="M0 180V56c0-13.3 10.7-24 24-24h124c6.6 0 12 5.4 12 12v40c0 6.6-5.4 12-12 12H64v84c0 6.6-5.4 12-12 12H12c-6.6 0-12-5.4-12-12zM288 44v40c0 6.6 5.4 12 12 12h84v84c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12V56c0-13.3-10.7-24-24-24H300c-6.6 0-12 5.4-12 12zm148 276h-40c-6.6 0-12 5.4-12 12v84h-84c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h124c13.3 0 24-10.7 24-24V332c0-6.6-5.4-12-12-12zM160 468v-40c0-6.6-5.4-12-12-12H64v-84c0-6.6-5.4-12-12-12H12c-6.6 0-12 5.4-12 12v124c0 13.3 10.7 24 24 24h124c6.6 0 12-5.4 12-12z"/></svg>';
-var SVG_COMPRESS='<svg viewBox="0 0 448 512" fill="currentColor"><path d="M436 192H312c-13.3 0-24-10.7-24-24V44c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v84h84c6.6 0 12 5.4 12 12v40c0 6.6-5.4 12-12 12zm-276-24V44c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v84H12c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h124c13.3 0 24-10.7 24-24zm0 300V344c0-13.3-10.7-24-24-24H12c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h84v84c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm192 0v-84h84c6.6 0 12-5.4 12-12v-40c0-6.6-5.4-12-12-12H312c-13.3 0-24 10.7-24 24v124c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12z"/></svg>';
+
+// Always show all 3 slots; mark USB specially
+var ALL_SOURCES = ['main','front','usb'];
 
 function renderGrid(){
   const grid=document.getElementById('camGrid');
-  grid.innerHTML=SOURCES.map(function(src){
+  grid.innerHTML=ALL_SOURCES.map(function(src){
     const label=src.charAt(0).toUpperCase()+src.slice(1)+' camera';
+    const avail=SOURCES.indexOf(src)>=0;
+    const badge=avail?'<span class="cam-badge off" id="badge_'+src+'">Inactive</span>'
+                     :'<span class="cam-badge usb" id="badge_'+src+'">Not connected</span>';
     return '<div class="cam-tile" id="tile_'+src+'" onclick="handleTileClick(\''+src+'\')">'
       +'<div class="cam-header">'
       +'<span class="cam-name">'+label+'</span>'
-      +'<span class="cam-badge off" id="badge_'+src+'">Inactive</span>'
-      +'<button class="cam-expbtn" id="expbtn_'+src+'" style="display:none" onclick="event.stopPropagation();toggleExpand(\''+src+'\')">'
-      +SVG_EXPAND+'<span id="expbtnlabel_'+src+'">Expand</span></button>'
+      +badge
+      +'<button class="cam-expbtn" id="expbtn_'+src+'" style="display:none" onclick="event.stopPropagation();openPanel(\''+src+'\')">'
+      +SVG_EXPAND+'<span>Expand</span></button>'
       +'</div>'
       +'<div class="cam-placeholder" id="ph_'+src+'">'
       +'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">'
-      +'<path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>'
-      +'</svg><span>Click to view</span></div>'
+      +(avail
+        ?'<path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>'
+        :'<path d="M23 7l-7 5 7 5V7z" opacity=".3"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2" opacity=".3"/><line x1="1" y1="1" x2="23" y2="23" stroke-width="2"/>'
+      )
+      +'</svg>'
+      +(avail?'<span>Click to view</span>':'<span>No USB camera connected</span>')
+      +'</div>'
       +'<img class="cam-frame" id="img_'+src+'" style="display:none" alt="'+src+'">'
       +'</div>';
   }).join('');
@@ -468,11 +492,8 @@ function renderGrid(){
 
 function handleTileClick(src){
   if(switching) return;
-  if(src===activeSource){
-    toggleExpand(src);
-  } else {
-    activateCamera(src);
-  }
+  if(SOURCES.indexOf(src)<0) return; // unavailable (USB not connected)
+  if(src!==activeSource) activateCamera(src);
 }
 
 async function activateCamera(src){
@@ -491,10 +512,8 @@ async function activateCamera(src){
     setBadge(activeSource,'off','Inactive');
     document.getElementById('expbtn_'+activeSource).style.display='none';
     document.getElementById('tile_'+activeSource).classList.remove('active');
-    if(expandedSource===activeSource){
-      document.getElementById('tile_'+activeSource).classList.remove('expanded');
-      expandedSource=null;
-    }
+    // Close expanded panel if it was open for the old source
+    if(expandedSource===activeSource) compressPanel();
     // wait for camera hardware to release (server waits up to 3s anyway)
     await sleep(800);
   }
@@ -516,10 +535,20 @@ async function activateCamera(src){
     document.getElementById('expbtn_'+src).style.display='flex';
     document.getElementById('liveDot').classList.remove('off');
     switching=false;
+    // If the expanded panel is showing this source, re-connect it
+    if(expandedSource===src){
+      var expImg=document.getElementById('expImg');
+      if(!expImg.src) expImg.src='/stream/'+src+(TOKEN?'?token='+TOKEN:'');
+    }
   };
   img.onerror=function(){
-    ph.innerHTML='<span style="color:#ef4444;font-size:.8rem">⚠ Stream unavailable</span>';
-    setBadge(src,'off','Error');
+    // Only show error if we actually tried to load (not when intentionally cleared)
+    if(!img.src) return;
+    ph.style.display='flex';
+    ph.innerHTML='<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".4"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>'
+      +'<span style="color:var(--red);font-size:.78rem">⚠ Stream unavailable</span>';
+    img.style.display='none';
+    setBadge(src,'off','Inactive');
     document.getElementById('expbtn_'+src).style.display='none';
     document.getElementById('liveDot').classList.add('off');
     switching=false;
@@ -527,24 +556,32 @@ async function activateCamera(src){
   img.src='/stream/'+src+(TOKEN?'?token='+TOKEN:'');
 }
 
-function toggleExpand(src){
-  const tile=document.getElementById('tile_'+src);
-  const btn=document.getElementById('expbtn_'+src);
-  const lbl=document.getElementById('expbtnlabel_'+src);
-  if(expandedSource===src){
-    tile.classList.remove('expanded');
-    btn.innerHTML=SVG_EXPAND+'<span id="expbtnlabel_'+src+'">Expand</span>';
+function openPanel(src){
+  expandedSource=src;
+  var panel=document.getElementById('expandedPanel');
+  var expImg=document.getElementById('expImg');
+  var label=src.charAt(0).toUpperCase()+src.slice(1)+' camera — expanded';
+  document.getElementById('expTitle').textContent=label;
+  // Open a second connection to the same stream (shareIn supports multiple subscribers)
+  expImg.src='/stream/'+src+(TOKEN?'?token='+TOKEN:'');
+  panel.style.display='block';
+  panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+  // Update expand button on the tile to show it's already open
+  var btn=document.getElementById('expbtn_'+src);
+  btn.innerHTML=SVG_EXPAND+'<span>Expanded</span>';
+  btn.style.opacity='.5';btn.style.pointerEvents='none';
+}
+
+function compressPanel(){
+  var panel=document.getElementById('expandedPanel');
+  var expImg=document.getElementById('expImg');
+  expImg.src='';
+  panel.style.display='none';
+  if(expandedSource){
+    var btn=document.getElementById('expbtn_'+expandedSource);
+    btn.innerHTML=SVG_EXPAND+'<span>Expand</span>';
+    btn.style.opacity=''; btn.style.pointerEvents='';
     expandedSource=null;
-  } else {
-    if(expandedSource){
-      const old=document.getElementById('tile_'+expandedSource);
-      old.classList.remove('expanded');
-      document.getElementById('expbtn_'+expandedSource).innerHTML=SVG_EXPAND+'<span id="expbtnlabel_'+expandedSource+'">Expand</span>';
-    }
-    tile.classList.add('expanded');
-    btn.innerHTML=SVG_COMPRESS+'<span id="expbtnlabel_'+src+'">Compress</span>';
-    expandedSource=src;
-    tile.scrollIntoView({behavior:'smooth',block:'nearest'});
   }
 }
 

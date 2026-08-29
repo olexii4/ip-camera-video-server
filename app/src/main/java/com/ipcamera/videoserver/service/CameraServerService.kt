@@ -86,13 +86,14 @@ class CameraServerService : LifecycleService() {
             webServer.start(port)
 
             if (settings.ftpEnabled.first()) {
-                ftpServer.start(settings.ftpPort.first(), archiveManager.archiveDir, username, plainPassword)
-            }
-            if (settings.ftpsEnabled.first()) {
-                val ftpsPort = settings.ftpsPort.first()
-                val sslFactory = runCatching { tlsCertManager.serverSocketFactory() }.getOrNull()
-                if (sslFactory != null) {
-                    ftpServer.startSecure(ftpsPort, archiveManager.archiveDir, username, plainPassword, sslFactory)
+                val port = settings.ftpPort.first()
+                if (settings.ftpsEnabled.first()) {
+                    val sslFactory = runCatching { tlsCertManager.serverSocketFactory() }.getOrNull()
+                    if (sslFactory != null) {
+                        ftpServer.startSecure(port, archiveManager.archiveDir, username, plainPassword, sslFactory)
+                    }
+                } else {
+                    ftpServer.start(port, archiveManager.archiveDir, username, plainPassword)
                 }
             }
 
