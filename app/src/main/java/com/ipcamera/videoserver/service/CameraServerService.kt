@@ -21,6 +21,7 @@ import com.ipcamera.videoserver.ftp.FtpServer
 import com.ipcamera.videoserver.network.IpMonitor
 import com.ipcamera.videoserver.server.WebServer
 import com.ipcamera.videoserver.settings.AppSettings
+import com.ipcamera.videoserver.tls.TlsCertManager
 import com.ipcamera.videoserver.ui.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
@@ -43,6 +44,7 @@ class CameraServerService : LifecycleService() {
     @Inject lateinit var ftpServer: FtpServer
     @Inject lateinit var archiveManager: ArchiveManager
     @Inject lateinit var cameraStreamManager: CameraStreamManager
+    @Inject lateinit var tlsCertManager: TlsCertManager
 
     private val archiveJobs = mutableMapOf<CameraSource, Job>()
 
@@ -83,8 +85,14 @@ class CameraServerService : LifecycleService() {
             webServer.start(port)
 
             if (settings.ftpEnabled.first()) {
-                val ftpPort = settings.ftpPort.first()
-                ftpServer.start(ftpPort, archiveManager.archiveDir, username, plainPassword)
+                ftpServer.start(settings.ftpPort.first(), archiveManager.archiveDir, username, plainPassword)
+            }
+            if (settings.ftpsEnabled.first()) {
+                val ftpsPort = settings.ftpsPort.first()
+                val sslFactory = runCatching { tlsCertManager.serverSocketFactory() }.getOrNull()
+                if (sslFactory != null) {
+                    ftpServer.startSecure(ftpsPort, archiveManager.archiveDir, username, plainPassword, sslFactory)
+                }
             }
 
             IpMonitor.schedule(this@CameraServerService, settings.ipPollIntervalMinutes.first().toLong())

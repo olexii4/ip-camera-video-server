@@ -10,6 +10,7 @@ import com.ipcamera.videoserver.auth.AuthManager
 import com.ipcamera.videoserver.auth.SessionRegistry
 import com.ipcamera.videoserver.service.CameraServerService
 import com.ipcamera.videoserver.settings.AppSettings
+import com.ipcamera.videoserver.tls.TlsCertManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +26,10 @@ class AppViewModel @Inject constructor(
     private val authManager: AuthManager,
     private val sessionRegistry: SessionRegistry,
     private val archiveManager: ArchiveManager,
+    private val tlsCertManager: TlsCertManager,
 ) : ViewModel() {
+
+    val tlsFingerprint: String by lazy { tlsCertManager.fingerprint() }
 
     val isRunning: StateFlow<Boolean> = CameraServerService.serverState
     val localIp: StateFlow<String> = CameraServerService.localIp

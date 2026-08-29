@@ -31,6 +31,8 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         val ARCHIVE_MAX_SIZE_GB = intPreferencesKey("archive_max_size_gb")
         val FTP_ENABLED = booleanPreferencesKey("ftp_enabled")
         val FTP_PORT = intPreferencesKey("ftp_port")
+        val FTPS_ENABLED = booleanPreferencesKey("ftps_enabled")
+        val FTPS_PORT = intPreferencesKey("ftps_port")
         val SERVER_STARTED_ON_BOOT = booleanPreferencesKey("server_started_on_boot")
     }
 
@@ -49,6 +51,8 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
     val archiveMaxSizeGb: Flow<Int> = context.dataStore.data.map { it[Keys.ARCHIVE_MAX_SIZE_GB] ?: 30 }
     val ftpEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.FTP_ENABLED] ?: false }
     val ftpPort: Flow<Int> = context.dataStore.data.map { it[Keys.FTP_PORT] ?: 2121 }
+    val ftpsEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.FTPS_ENABLED] ?: false }
+    val ftpsPort: Flow<Int> = context.dataStore.data.map { it[Keys.FTPS_PORT] ?: 2122 }
     val serverStartedOnBoot: Flow<Boolean> = context.dataStore.data.map { it[Keys.SERVER_STARTED_ON_BOOT] ?: false }
 
     suspend fun setServerPort(port: Int) = context.dataStore.edit { it[Keys.SERVER_PORT] = port }
@@ -66,5 +70,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
     suspend fun setArchiveMaxSizeGb(gb: Int) = context.dataStore.edit { it[Keys.ARCHIVE_MAX_SIZE_GB] = gb }
     suspend fun setFtpEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.FTP_ENABLED] = enabled }
     suspend fun setFtpPort(port: Int) = context.dataStore.edit { it[Keys.FTP_PORT] = port }
+    suspend fun setFtpsEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.FTPS_ENABLED] = enabled }
+    suspend fun setFtpsPort(port: Int) = context.dataStore.edit { it[Keys.FTPS_PORT] = port }
     suspend fun setServerStartedOnBoot(enabled: Boolean) = context.dataStore.edit { it[Keys.SERVER_STARTED_ON_BOOT] = enabled }
 }

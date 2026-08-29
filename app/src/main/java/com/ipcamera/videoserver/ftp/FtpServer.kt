@@ -8,36 +8,67 @@ import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
+import javax.net.ServerSocketFactory
+import javax.net.ssl.SSLServerSocket
+import javax.net.ssl.SSLServerSocketFactory
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.SSLSocketFactory
 
 @Singleton
 class FtpServer @Inject constructor() {
 
     private var serverJob: Job? = null
     private var serverSocket: ServerSocket? = null
+    private var secureJob: Job? = null
+    private var secureSocket: ServerSocket? = null
     private var scope = newScope()
 
     private fun newScope() = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    fun start(port: Int, archiveDir: File, username: String, password: String) {
-        serverJob = scope.launch {
+    fun start(port: Int, archiveDir: File, username: String, password: String) =
+        launch(port, archiveDir, username, password, null, isSecure = false)
+
+    fun startSecure(
+        port: Int,
+        archiveDir: File,
+        username: String,
+        password: String,
+        sslSocketFactory: SSLServerSocketFactory,
+    ) = launch(port, archiveDir, username, password, sslSocketFactory, isSecure = true)
+
+    private fun launch(
+        port: Int,
+        archiveDir: File,
+        username: String,
+        password: String,
+        sslSocketFactory: SSLServerSocketFactory?,
+        isSecure: Boolean,
+    ) {
+        val factory: ServerSocketFactory = sslSocketFactory ?: ServerSocketFactory.getDefault()
+        val job = scope.launch {
             runCatching {
-                ServerSocket(port).also { serverSocket = it }.use { ss ->
-                    while (isActive) {
-                        val client = runCatching { ss.accept() }.getOrNull() ?: break
-                        launch { handleClient(client, archiveDir, username, password) }
+                (factory.createServerSocket(port) as ServerSocket).also { ss ->
+                    (ss as? SSLServerSocket)?.useClientMode = false
+                    if (isSecure) secureSocket = ss else serverSocket = ss
+                    ss.use {
+                        while (isActive) {
+                            val client = runCatching { ss.accept() }.getOrNull() ?: break
+                            launch { handleClient(client, archiveDir, username, password, sslSocketFactory) }
+                        }
                     }
                 }
             }
         }
+        if (isSecure) secureJob = job else serverJob = job
     }
 
     fun stop() {
-        serverJob?.cancel()
-        serverSocket?.close()
+        serverJob?.cancel(); serverSocket?.close()
+        secureJob?.cancel(); secureSocket?.close()
         scope.cancel()
         scope = newScope()
-        serverJob = null
-        serverSocket = null
+        serverJob = null; serverSocket = null
+        secureJob = null; secureSocket = null
     }
 
     private suspend fun handleClient(
@@ -45,6 +76,7 @@ class FtpServer @Inject constructor() {
         archiveDir: File,
         username: String,
         password: String,
+        sslSocketFactory: SSLServerSocketFactory? = null,
     ) {
         socket.use {
             val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
@@ -79,15 +111,20 @@ class FtpServer @Inject constructor() {
                     "TYPE" -> writer.println("200 Type set")
                     "PASV" -> {
                         if (!authenticated) { writer.println("530 Not logged in"); continue }
-                        val passiveServer = ServerSocket(0)
-                        val p = passiveServer.localPort
+                        val passiveServerSocket: ServerSocket = if (sslSocketFactory != null) {
+                            (sslSocketFactory.createServerSocket(0) as SSLServerSocket)
+                                .also { it.useClientMode = false }
+                        } else {
+                            ServerSocket(0)
+                        }
+                        val p = passiveServerSocket.localPort
                         val host = dataHost.replace('.', ',')
                         writer.println("227 Entering Passive Mode ($host,${p / 256},${p % 256})")
                         val deferred = CompletableDeferred<Socket?>()
                         dataDeferred = deferred
                         scope.launch {
-                            deferred.complete(runCatching { passiveServer.accept() }.getOrNull())
-                            passiveServer.close()
+                            deferred.complete(runCatching { passiveServerSocket.accept() }.getOrNull())
+                            passiveServerSocket.close()
                         }
                     }
                     "LIST" -> {
