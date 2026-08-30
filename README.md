@@ -1,127 +1,144 @@
 # IP Camera Video Server
 
-An Android application that turns a phone into a self-hosted IP camera server. Streams live video from front and rear cameras over HTTP, protects access with JWT authentication, records local video archives, and notifies you by SMS when the device's public IP changes.
+**Give your old phones a second life as security cameras.**
 
-Primary target: **Huawei P20 Lite** (Android 8.0+, minSdk 26).
+Old Android phones with cracked screens, worn batteries, or outdated specs are usually thrown away — but their cameras still work perfectly. This project turns any such phone into a self-hosted IP camera with a built-in web server, using both the front and rear cameras simultaneously as separate streams.
 
-## Features
+No cloud, no subscription, no account. The phone runs its own HTTP server. You connect to it from any browser on your network.
 
-- **MJPEG streaming** — front camera (`/stream/front`), rear camera (`/stream/main`), USB OTG camera (`/stream/usb`)
-- **JWT authentication** — token issued at `POST /oauth/token`, required on all stream and status endpoints
-- **SMS IP notification** — sends a text with the new server URL when the public IP changes
-- **Local archive** — continuous 30-minute MP4 segments; configurable file count and total size cap (default 30 GB)
-- **Embedded FTP server** — read-only access to the archive directory (default port 2121)
-- **Status dashboard** — local IP, active sessions, one-tap URL copy
-- **Boot autostart** — optional; toggle in Settings
+---
 
-## Build and install
+## What it does
 
-Requires Android SDK (API 34) and JDK 17 or 21 (`brew install openjdk@17`).
+- **Streams live video** from the front camera, rear camera, and optionally a USB OTG camera — each as an independent MJPEG stream
+- **Hosts a web UI** at `http://<phone-ip>:8080` — login, view streams, browse and download recordings, all in the browser
+- **Records continuously** in 15-minute MP4 segments to the phone's storage, with configurable size limits and automatic rotation
+- **Sends an SMS** when the phone's public IP address changes, so you can always find it
+- **Serves recorded files over FTP/FTPS** for easy bulk download
+- **Requires no screen interaction** after setup — designed for phones with broken displays
 
-```bash
-# Build debug APK
-./scripts/build.sh
+---
 
-# Build + install to connected device + set up port forward
-./scripts/install.sh
-```
+## Target hardware
 
-Both scripts auto-detect Homebrew JDK 17/21 and the Android SDK path.
+Primary target: **Huawei P20 Lite** (Android 8.0+, dual camera).
 
-### Manual build commands
+Works on any Android 8.0+ phone. Dual-camera phones give you two independent streams; single-camera phones give you one. USB OTG support adds a third stream from a UVC webcam.
 
-```bash
-JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.19/libexec/openjdk.jdk/Contents/Home \
-  ./gradlew :app:assembleDebug
+---
 
-# Install
-~/Library/Android/sdk/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
+## How to use
 
-### Connecting the phone (USB)
+### One-time setup on the phone
 
-1. **Settings → About phone → tap "Build number" 7 times** (enables Developer Options)
-2. **Settings → Developer options → USB debugging → ON**
-3. Connect USB cable; tap **Allow** on the phone when prompted
+1. **Enable Developer Options**: Settings → About phone → tap **Build number** 7 times
+2. **Enable USB debugging**: Settings → Developer options → USB debugging → ON
+3. Connect the phone to your Mac via USB and tap **Allow** when prompted
+4. Run the install script:
+   ```bash
+   ./scripts/install.sh
+   ```
+   This builds the APK, installs it, configures EMUI background service permissions, and opens the app.
 
-## Connecting to the server
+5. Press **Start** in the app, then open **http://127.0.0.1:8080** in your browser.
 
-Huawei's firewall blocks incoming WiFi TCP connections by default. Two options:
+Default credentials: `admin` / `admin` — change in **Settings → Access control**.
 
-**Option A — disable the firewall on the phone (persistent):**
+### Daily use (no USB needed)
+
+Once installed, the phone runs the server independently:
+- Plug the phone into power (charger, USB hub, etc.)
+- The server starts automatically on boot (enable in Settings)
+- Connect to `http://<phone-ip>:8080` from any browser on your network
+
+To find the phone's IP: the Status screen in the app shows the current local IP.  
+If the IP changes: the SMS notification feature texts you the new address.
+
+---
+
+## Web interface
+
+Open `http://<phone-ip>:8080` in any browser (Chrome, Firefox, Safari, mobile browsers).
+
+| Tab | What it does |
+|-----|-------------|
+| **Cameras** | 350×200px tiles for each camera source. Press ▶ Play to start a stream. Click **Expand** to open a full-width panel below the grid. |
+| **Files** | List of recorded segments with file size and date. Download or delete individual files. Updated live via WebSocket. |
+
+Sessions are exclusive: a new login revokes all other active sessions. The browser returns to the login page if the server stops or the session is revoked.
+
+---
+
+## Connecting from other devices (LAN access)
+
+Huawei phones block incoming WiFi connections by default. Two options:
+
+**Option A — disable the firewall on the phone (permanent):**
 
 Settings → Developer options → Disable WiFi firewall restrictions
 
-Then connect directly via the device's WiFi IP (shown on the Status screen).
+Then connect directly at `http://<phone-ip>:8080` from any device.
 
-**Option B — USB port forward (no phone setting needed):**
+**Option B — Mac relay (development/testing only):**
 
-```bash
-~/Library/Android/sdk/platform-tools/adb forward tcp:8080 tcp:8080
-```
-
-Then connect to `http://127.0.0.1:8080` from this machine.
-
-### Default credentials
-
-| Field    | Value   |
-|----------|---------|
-| Username | `admin` |
-| Password | `admin` |
-
-### Get a token
+With the USB cable connected and `./scripts/install.sh` already run:
 
 ```bash
-TOKEN=$(curl -s -X POST http://127.0.0.1:8080/oauth/token \
-  -d "username=admin&password=admin" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+./scripts/relay.sh
 ```
 
-### Watch a stream
+This relays `<mac-ip>:8080` → phone via USB tunnel. Other devices on the same WiFi can connect to the Mac's IP instead of the phone's IP.
 
-Open in any MJPEG-capable browser or VLC:
+---
 
-```
-http://127.0.0.1:8080/stream/main
-Authorization: Bearer <token>
-```
+## FTP access to recordings
 
-Via curl:
+Enable in **Settings → FTP Server**. Credentials are the same as the web login.
 
-```bash
-curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/stream/main
-```
+| Mode | Port | Security |
+|------|------|----------|
+| Plain FTP | 2121 | Unencrypted — LAN only |
+| FTPS | 2122 | TLS — encrypted |
 
-### Check server status
+When FTPS is enabled, the app generates a self-signed certificate stored in the Android Keystore (hardware-backed). The SHA-256 fingerprint is shown in Settings — enter it in your FTP client to verify the server's identity.
 
-```bash
-curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/status | python3 -m json.tool
-```
+---
 
-## HTTP API
+## Build scripts
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET` | `/ping` | No | Health check — returns `pong` |
-| `POST` | `/oauth/token` | No | Issue JWT; body: `username=&password=` |
-| `GET` | `/stream/front` | Bearer | MJPEG stream from front camera |
-| `GET` | `/stream/main` | Bearer | MJPEG stream from rear camera |
-| `GET` | `/stream/usb` | Bearer | MJPEG stream from USB OTG camera |
-| `GET` | `/status` | Bearer | JSON: server status and active sessions |
+| Script | Purpose |
+|--------|---------|
+| `scripts/build.sh` | Compile the APK. Auto-detects JDK 17/21 from Homebrew or Android Studio. |
+| `scripts/install.sh` | Build + install on a connected phone + configure EMUI permissions + port forward. |
+| `scripts/relay.sh` | **Development only.** TCP relay from Mac WiFi → USB tunnel, so LAN devices can reach the phone server while the USB cable is connected. |
 
-## Run unit tests
+---
 
-```bash
-JAVA_HOME=/opt/homebrew/Cellar/openjdk@17/17.0.19/libexec/openjdk.jdk/Contents/Home \
-  ./gradlew :app:test
-```
+## Architecture
 
-## Architecture overview
+All server logic runs in an Android `ForegroundService` so it keeps running when the screen is off or when using a phone with a broken display. The UI (if available) is a Jetpack Compose single-activity app that connects to the service.
 
-All server logic runs in a foreground `Service` (`CameraServerService`) independent of the UI. The embedded Ktor HTTP server handles streaming and auth. Camera2 JPEG frames are exposed as Kotlin `SharedFlow<ByteArray>` — a camera session opens on first subscriber and closes when idle. WorkManager polls the public IP periodically and fires SMS on change. Settings are persisted in Jetpack DataStore.
+- **HTTP server**: Ktor CIO, MJPEG multipart streams, JWT auth
+- **Camera**: Camera2 API, 640×480 JPEG, single buffer for low latency
+- **Archive**: MediaRecorder → MP4, 15-min segments, count + 30 GB size cap
+- **IP monitoring**: WorkManager periodic task, SmsManager
+- **Settings**: Jetpack DataStore
+- **FTP/FTPS**: hand-rolled passive-mode server, TLS via Android Keystore
+- **WebSocket**: live status + file list pushed every 2 seconds
 
 See [`CLAUDE.md`](CLAUDE.md) for full architectural detail.
 
+---
+
 ## Permissions
 
-The app requests: `CAMERA`, `RECORD_AUDIO`, `SEND_SMS`, `READ_PHONE_STATE`, `INTERNET`, `ACCESS_WIFI_STATE`, `FOREGROUND_SERVICE`, `WAKE_LOCK`. SMS and phone-state permissions are only used for IP-change notifications; the app degrades gracefully if denied.
+| Permission | Used for |
+|-----------|---------|
+| `CAMERA` | Front and rear camera access |
+| `RECORD_AUDIO` | Audio in recordings |
+| `INTERNET` | HTTP server, public IP polling |
+| `ACCESS_WIFI_STATE` | Read local IP address |
+| `SEND_SMS` | IP-change notifications |
+| `FOREGROUND_SERVICE` | Keep server alive when screen is off |
+| `WAKE_LOCK` | Prevent CPU sleep while streaming |
+| `RECEIVE_BOOT_COMPLETED` | Auto-start on device boot |

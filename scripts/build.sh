@@ -1,4 +1,18 @@
 #!/usr/bin/env bash
+#
+# build.sh — Build the debug APK
+#
+# Compiles the Android app and produces:
+#   app/build/outputs/apk/debug/app-debug.apk
+#
+# Requirements:
+#   - macOS with Homebrew JDK 17 or 21 (brew install openjdk@17)
+#     OR Android Studio installed (uses its bundled JRE)
+#   - Android SDK in ~/Library/Android/sdk (set sdk.dir in local.properties if different)
+#
+# Usage:
+#   ./scripts/build.sh
+#
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,3 +43,4 @@ cd "$PROJECT_DIR"
 APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
 echo ""
 echo "Build successful: $APK"
+echo "Run ./scripts/install.sh to deploy to a connected phone."
