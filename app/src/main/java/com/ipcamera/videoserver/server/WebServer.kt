@@ -398,6 +398,7 @@ input:focus{border-color:var(--accent)}
 
 <script>
 let TOKEN='', SOURCES=[], activeSource=null, expandedSource=null, switching=false, ws=null;
+var intentionallyOff=new Set(); // sources stopped on purpose — suppress onerror for these
 
 window.addEventListener('DOMContentLoaded', async ()=>{
   const cfg = await fetch('/auth-config').then(r=>r.json()).catch(()=>({authRequired:true}));
@@ -528,6 +529,7 @@ function toggleStream(src){
 function stopStream(){
   if(!activeSource) return;
   const src=activeSource;
+  intentionallyOff.add(src); // mark as intentional before clearing src
   const img=document.getElementById('img_'+src);
   img.src=''; img.style.display='none';
   const ph=document.getElementById('ph_'+src);
@@ -570,6 +572,7 @@ async function activateCamera(src){
   // Stop old stream
   if(activeSource){
     const prev=activeSource;
+    intentionallyOff.add(prev); // mark before clearing src to suppress onerror
     const oldImg=document.getElementById('img_'+prev);
     oldImg.src=''; oldImg.style.display='none';
     const prevPh=document.getElementById('ph_'+prev);
@@ -611,17 +614,19 @@ async function activateCamera(src){
     }
   };
   img.onerror=function(){
-    // Only show error if we actually tried to load (not when intentionally cleared)
-    if(!img.src) return;
+    // Suppress error when src was cleared intentionally (stop button / camera switch)
+    if(intentionallyOff.has(src)) return;
     ph.style.display='flex';
     ph.innerHTML='<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".4"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>'
       +'<span style="color:var(--red);font-size:.78rem">⚠ Stream unavailable</span>';
     img.style.display='none';
     setBadge(src,'off','Inactive');
+    setPlayBtn(src,false);
     document.getElementById('expbtn_'+src).style.display='none';
     document.getElementById('liveDot').classList.add('off');
     switching=false;
   };
+  intentionallyOff.delete(src); // clear flag — errors now are real failures
   img.src='/stream/'+src+(TOKEN?'?token='+TOKEN:'');
 }
 
