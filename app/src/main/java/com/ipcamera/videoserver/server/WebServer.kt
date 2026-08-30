@@ -764,19 +764,19 @@ function renderFiles(files){
     const date=new Date(f.modified).toLocaleString();
     const enc=encodeURIComponent(f.name);
     const saving=f.saving||false;
-    const savingBadge=saving
-      ?'<span class="f-saving"><span class="f-saving-spin"></span>Saving…</span>'
-      :'';
     const downloadBtn=saving
       ?'<span class="btn btn-ghost btn-sm btn-disabled" title="File is still being recorded">⬇ Saving…</span>'
       :'<a class="btn btn-ghost btn-sm" href="/api/files/download/'+enc+(TOKEN?'?token='+TOKEN:'')+'" download="'+f.name+'">⬇ Download</a>';
     const deleteBtn=saving
       ?'<span class="btn btn-danger btn-sm btn-disabled" title="Cannot delete a file being recorded">🗑</span>'
       :'<button class="btn btn-danger btn-sm" onclick="deleteFile(\''+f.name+'\')">🗑</button>';
+    const savingBadge=saving
+      ?'<span class="f-saving"><span class="f-saving-spin"></span>Saving…</span>'
+      :'';
     return '<div class="file-row">'
-      +'<span class="f-name">'+f.name+savingBadge+'</span>'
+      +'<span class="f-name">'+f.name+'</span>'
       +'<span class="f-meta">'+mb+' MB &nbsp;·&nbsp; '+date+'</span>'
-      +'<span class="f-act">'+downloadBtn+deleteBtn+'</span>'
+      +'<span class="f-act">'+savingBadge+downloadBtn+deleteBtn+'</span>'
       +'</div>';
   }).join('')+'</div>';
 }
