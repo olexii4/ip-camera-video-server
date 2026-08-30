@@ -83,15 +83,18 @@ class WebServer @Inject constructor(
                     call.respondText(json.encodeToString(TokenResponse(token, "Bearer", 3600)), ContentType.Application.Json)
                 }
 
-                // Live microphone audio stream — ADTS-wrapped AAC, playable in any browser <audio>
-                get("/stream/audio") {
-                    requireAuth(call) ?: return@get
-                    call.response.header(HttpHeaders.CacheControl, "no-cache")
-                    call.respondBytesWriter(contentType = ContentType("audio", "aac")) {
-                        audioStreamManager.stream { adtsFrame ->
-                            writeFully(adtsFrame)
-                            flush()
+                // Raw PCM audio via WebSocket — low-latency mic monitoring
+                // Browser decodes 16-bit LE PCM at 16kHz with Web Audio API
+                webSocket("/ws/audio") {
+                    val bearer = call.request.queryParameters["token"]
+                    if (authManager.authRequired) {
+                        if (bearer == null || authManager.validateToken(bearer) == null) {
+                            close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Unauthorized"))
+                            return@webSocket
                         }
+                    }
+                    audioStreamManager.stream { pcmChunk ->
+                        send(Frame.Binary(true, pcmChunk))
                     }
                 }
 
@@ -410,7 +413,6 @@ input:focus{border-color:var(--accent)}
       <div id="expandedPanel">
         <div class="exp-header">
           <span id="expTitle"></span>
-          <audio id="expAudio" style="display:none"></audio>
           <button class="cam-expbtn" id="listenBtn" onclick="toggleAudio()" title="Listen to microphone">
             <svg viewBox="0 0 384 512" fill="currentColor" width="10" height="10"><path d="M192 0C139 0 96 43 96 96V256c0 53 43 96 96 96s96-43 96-96V96c0-53-43-96-96-96zM64 216c0-13.3-10.7-24-24-24s-24 10.7-24 24v40c0 89.1 66.2 162.7 152 174.4V464H120c-13.3 0-24 10.7-24 24s10.7 24 24 24h72 72c13.3 0 24-10.7 24-24s-10.7-24-24-24H216V430.4c85.8-11.7 152-85.3 152-174.4V216c0-13.3-10.7-24-24-24s-24 10.7-24 24v40c0 70.7-57.3 128-128 128S64 326.7 64 256V216z"/></svg>
             Listen
@@ -711,7 +713,8 @@ function compressPanel(){
   }
 }
 
-var audioPlaying=false;
+var audioPlaying=false, audioWs=null, audioCtx=null, nextPlayTime=0;
+var SAMPLE_RATE=16000; // must match server AudioStreamManager.AUDIO_SAMPLE_RATE
 
 function toggleAudio(){
   if(audioPlaying) stopAudio();
@@ -719,20 +722,36 @@ function toggleAudio(){
 }
 
 function startAudio(){
-  var audio=document.getElementById('expAudio');
-  audio.src='/stream/audio'+(TOKEN?'?token='+TOKEN:'');
-  audio.play().catch(function(){});
+  if(audioPlaying) return;
+  audioCtx=new (window.AudioContext||window.webkitAudioContext)({sampleRate:SAMPLE_RATE,latencyHint:'interactive'});
+  nextPlayTime=audioCtx.currentTime+0.05; // 50ms initial buffer
+  var wsUrl=(location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+'/ws/audio'+(TOKEN?'?token='+TOKEN:'');
+  audioWs=new WebSocket(wsUrl);
+  audioWs.binaryType='arraybuffer';
+  audioWs.onmessage=function(e){
+    // Each message is a chunk of 16-bit signed PCM at 16kHz mono
+    var pcm16=new Int16Array(e.data);
+    var f32=new Float32Array(pcm16.length);
+    for(var i=0;i<pcm16.length;i++) f32[i]=pcm16[i]/32768.0;
+    var buf=audioCtx.createBuffer(1,f32.length,SAMPLE_RATE);
+    buf.copyToChannel(f32,0);
+    var src=audioCtx.createBufferSource();
+    src.buffer=buf;
+    src.connect(audioCtx.destination);
+    var now=audioCtx.currentTime;
+    if(nextPlayTime<now) nextPlayTime=now+0.02; // resync if we fell behind
+    src.start(nextPlayTime);
+    nextPlayTime+=buf.duration;
+  };
+  audioWs.onclose=function(){ if(audioPlaying) stopAudio(); };
   audioPlaying=true;
   var btn=document.getElementById('listenBtn');
-  btn.style.background='rgba(34,197,94,.2)';
-  btn.style.color='var(--green)';
-  btn.title='Stop listening';
+  if(btn){ btn.style.background='rgba(34,197,94,.2)'; btn.style.color='var(--green)'; btn.title='Stop listening'; }
 }
 
 function stopAudio(){
-  var audio=document.getElementById('expAudio');
-  audio.pause();
-  audio.src='';
+  if(audioWs){ audioWs.onclose=null; audioWs.close(); audioWs=null; }
+  if(audioCtx){ audioCtx.close(); audioCtx=null; }
   audioPlaying=false;
   var btn=document.getElementById('listenBtn');
   if(btn){ btn.style.background=''; btn.style.color=''; btn.title='Listen to microphone'; }
