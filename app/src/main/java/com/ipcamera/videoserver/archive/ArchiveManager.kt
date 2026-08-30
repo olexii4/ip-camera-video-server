@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.first
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.channels.Channel
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,6 +37,11 @@ class ArchiveManager @Inject constructor(
 ) {
     private val sdf = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US)
     private val savingFiles: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    private val finalizeChannel = Channel<Unit>(Channel.CONFLATED)
+
+    /** Signals the active recording to stop the current segment and start a new one. */
+    fun requestFinalize() { finalizeChannel.trySend(Unit) }
+    fun consumeFinalize(): Boolean = finalizeChannel.tryReceive().isSuccess
 
     val archiveDir: File
         get() = File(context.getExternalFilesDir(null), "archive").also { it.mkdirs() }
