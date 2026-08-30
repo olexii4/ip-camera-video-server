@@ -1,6 +1,7 @@
 package com.ipcamera.videoserver.server
 
 import com.ipcamera.videoserver.archive.ArchiveManager
+import com.ipcamera.videoserver.audio.AudioStreamManager
 import com.ipcamera.videoserver.auth.AuthManager
 import com.ipcamera.videoserver.auth.SessionInfo
 import com.ipcamera.videoserver.auth.SessionRegistry
@@ -34,6 +35,7 @@ class WebServer @Inject constructor(
     private val sessionRegistry: SessionRegistry,
     private val cameraStreamManager: CameraStreamManager,
     private val archiveManager: ArchiveManager,
+    private val audioStreamManager: AudioStreamManager,
 ) {
     private var server: ApplicationEngine? = null
 
@@ -69,6 +71,18 @@ class WebServer @Inject constructor(
                     val claims = authManager.validateToken(token)!!
                     sessionRegistry.register(SessionInfo(claims.tokenId, claims.username, call.request.local.remoteAddress))
                     call.respondText(json.encodeToString(TokenResponse(token, "Bearer", 3600)), ContentType.Application.Json)
+                }
+
+                // Live microphone audio stream — ADTS-wrapped AAC, playable in any browser <audio>
+                get("/stream/audio") {
+                    requireAuth(call) ?: return@get
+                    call.response.header(HttpHeaders.CacheControl, "no-cache")
+                    call.respondBytesWriter(contentType = ContentType("audio", "aac")) {
+                        audioStreamManager.stream { adtsFrame ->
+                            writeFully(adtsFrame)
+                            flush()
+                        }
+                    }
                 }
 
                 // WebSocket: live status + files, closes when session revoked or server stops
@@ -367,7 +381,7 @@ input:focus{border-color:var(--accent)}
     <nav>
       <button class="tab on" onclick="showTab('cameras',this)">Cameras</button>
       <button class="tab" onclick="showTab('files',this)">Files</button>
-      <button class="tab logout" onclick="logout()" title="Logout"><svg width="16" height="16" viewBox="0 0 90 90" fill="currentColor"><path d="M69.313 54.442c-.397 0-.798-.118-1.147-.363-.904-.636-1.122-1.883-.487-2.786l10.118-14.399L67.679 22.495c-.635-.904-.417-2.151.487-2.786.904-.637 2.151-.417 2.786.486l10.926 15.549c.484.69.484 1.61 0 2.3L70.952 53.592c-.389.554-1.009.85-1.639.85z"/><path d="M57.693 30.092c1.104 0 2-.896 2-2V2c0-1.104-.896-2-2-2H9.759c-.037 0-.074.004-.111.007-.354.025-.639.126-.89.213-.196.05-.397.13-.523.197-.025.014-.054.019-.077.034l-.031.025a1.985 1.985 0 0 0-.36.287C8.313.62 8.299.643 8.281.662A1.985 1.985 0 0 0 7.82 1.532C7.783 1.683 7.759 1.838 7.759 2v69.787c0 .17.028.333.068.49.011.043.025.083.039.124.04.123.091.239.152.35.019.033.034.068.054.1.086.135.185.26.3.371.022.021.047.037.07.058.102.09.214.169.333.237.021.012.037.03.058.042l31.016 16.213C40.139 89.925 40.457 90 40.775 90c.359 0 .718-.097 1.036-.289.598-.362.964-1.012.964-1.711V73.787h14.918c1.104 0 2-.896 2-2V45c0-1.104-.896-2-2-2s-2 .896-2 2v24.787H42.775V18.213c0-.745-.414-1.428-1.074-1.772L17.902 4h37.791v24.092c0 1.104.896 2 2 2z"/><path d="M80.241 38.894H47.536c-1.104 0-2-.896-2-2s.896-2 2-2h32.705c1.104 0 2 .896 2 2s-.896 2-2 2z"/></svg></button>
+      <button class="tab logout" onclick="logout()" title="Logout — revokes current session"><svg width="16" height="16" viewBox="0 0 90 90" fill="currentColor"><path d="M69.313 54.442c-.397 0-.798-.118-1.147-.363-.904-.636-1.122-1.883-.487-2.786l10.118-14.399L67.679 22.495c-.635-.904-.417-2.151.487-2.786.904-.637 2.151-.417 2.786.486l10.926 15.549c.484.69.484 1.61 0 2.3L70.952 53.592c-.389.554-1.009.85-1.639.85z"/><path d="M57.693 30.092c1.104 0 2-.896 2-2V2c0-1.104-.896-2-2-2H9.759c-.037 0-.074.004-.111.007-.354.025-.639.126-.89.213-.196.05-.397.13-.523.197-.025.014-.054.019-.077.034l-.031.025a1.985 1.985 0 0 0-.36.287C8.313.62 8.299.643 8.281.662A1.985 1.985 0 0 0 7.82 1.532C7.783 1.683 7.759 1.838 7.759 2v69.787c0 .17.028.333.068.49.011.043.025.083.039.124.04.123.091.239.152.35.019.033.034.068.054.1.086.135.185.26.3.371.022.021.047.037.07.058.102.09.214.169.333.237.021.012.037.03.058.042l31.016 16.213C40.139 89.925 40.457 90 40.775 90c.359 0 .718-.097 1.036-.289.598-.362.964-1.012.964-1.711V73.787h14.918c1.104 0 2-.896 2-2V45c0-1.104-.896-2-2-2s-2 .896-2 2v24.787H42.775V18.213c0-.745-.414-1.428-1.074-1.772L17.902 4h37.791v24.092c0 1.104.896 2 2 2z"/><path d="M80.241 38.894H47.536c-1.104 0-2-.896-2-2s.896-2 2-2h32.705c1.104 0 2 .896 2 2s-.896 2-2 2z"/></svg></button>
     </nav>
   </header>
 
@@ -377,8 +391,13 @@ input:focus{border-color:var(--accent)}
       <div id="expandedPanel">
         <div class="exp-header">
           <span id="expTitle"></span>
-          <button class="cam-expbtn" onclick="compressPanel()">
-            <svg viewBox="0 0 448 512" fill="currentColor"><path d="M436 192H312c-13.3 0-24-10.7-24-24V44c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v84h84c6.6 0 12 5.4 12 12v40c0 6.6-5.4 12-12 12zm-276-24V44c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v84H12c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h124c13.3 0 24-10.7 24-24zm0 300V344c0-13.3-10.7-24-24-24H12c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h84v84c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm192 0v-84h84c6.6 0 12-5.4 12-12v-40c0-6.6-5.4-12-12-12H312c-13.3 0-24 10.7-24 24v124c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12z"/></svg>
+          <audio id="expAudio" style="display:none"></audio>
+          <button class="cam-expbtn" id="listenBtn" onclick="toggleAudio()" title="Listen to microphone">
+            <svg viewBox="0 0 384 512" fill="currentColor" width="10" height="10"><path d="M192 0C139 0 96 43 96 96V256c0 53 43 96 96 96s96-43 96-96V96c0-53-43-96-96-96zM64 216c0-13.3-10.7-24-24-24s-24 10.7-24 24v40c0 89.1 66.2 162.7 152 174.4V464H120c-13.3 0-24 10.7-24 24s10.7 24 24 24h72 72c13.3 0 24-10.7 24-24s-10.7-24-24-24H216V430.4c85.8-11.7 152-85.3 152-174.4V216c0-13.3-10.7-24-24-24s-24 10.7-24 24v40c0 70.7-57.3 128-128 128S64 326.7 64 256V216z"/></svg>
+            Listen
+          </button>
+          <button class="cam-expbtn" onclick="compressPanel()" title="Compress">
+            <svg viewBox="0 0 448 512" fill="currentColor" width="10" height="10"><path d="M436 192H312c-13.3 0-24-10.7-24-24V44c0-6.6 5.4-12 12-12h40c6.6 0 12 5.4 12 12v84h84c6.6 0 12 5.4 12 12v40c0 6.6-5.4 12-12 12zm-276-24V44c0-6.6-5.4-12-12-12h-40c-6.6 0-12 5.4-12 12v84H12c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h124c13.3 0 24-10.7 24-24zm0 300V344c0-13.3-10.7-24-24-24H12c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h84v84c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12zm192 0v-84h84c6.6 0 12-5.4 12-12v-40c0-6.6-5.4-12-12-12H312c-13.3 0-24 10.7-24 24v124c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12z"/></svg>
             Compress
           </button>
         </div>
@@ -543,6 +562,7 @@ function stopStream(){
   document.getElementById('expbtn_'+src).style.display='none';
   document.getElementById('tile_'+src).classList.remove('active');
   if(expandedSource===src) compressPanel();
+  else document.getElementById('tile_'+src).style.display=''; // ensure tile visible
   document.getElementById('liveDot').classList.add('off');
   activeSource=null;
 }
@@ -634,29 +654,56 @@ function openPanel(src){
   expandedSource=src;
   var panel=document.getElementById('expandedPanel');
   var expImg=document.getElementById('expImg');
-  var label=src.charAt(0).toUpperCase()+src.slice(1)+' camera — expanded';
-  document.getElementById('expTitle').textContent=label;
+  document.getElementById('expTitle').textContent=src.charAt(0).toUpperCase()+src.slice(1)+' camera';
+  // Hide the tile — it reappears on Compress
+  document.getElementById('tile_'+src).style.display='none';
   // Open a second connection to the same stream (shareIn supports multiple subscribers)
   expImg.src='/stream/'+src+(TOKEN?'?token='+TOKEN:'');
   panel.style.display='block';
   panel.scrollIntoView({behavior:'smooth',block:'nearest'});
-  // Update expand button on the tile to show it's already open
-  var btn=document.getElementById('expbtn_'+src);
-  btn.innerHTML=SVG_EXPAND+'<span>Expanded</span>';
-  btn.style.opacity='.5';btn.style.pointerEvents='none';
+  // Stop audio if previously playing another source
+  stopAudio();
 }
 
 function compressPanel(){
   var panel=document.getElementById('expandedPanel');
   var expImg=document.getElementById('expImg');
+  intentionallyOff.add('__audio__');
+  stopAudio();
   expImg.src='';
   panel.style.display='none';
   if(expandedSource){
-    var btn=document.getElementById('expbtn_'+expandedSource);
-    btn.innerHTML=SVG_EXPAND+'<span>Expand</span>';
-    btn.style.opacity=''; btn.style.pointerEvents='';
+    // Restore the tile
+    document.getElementById('tile_'+expandedSource).style.display='';
     expandedSource=null;
   }
+}
+
+var audioPlaying=false;
+
+function toggleAudio(){
+  if(audioPlaying) stopAudio();
+  else startAudio();
+}
+
+function startAudio(){
+  var audio=document.getElementById('expAudio');
+  audio.src='/stream/audio'+(TOKEN?'?token='+TOKEN:'');
+  audio.play().catch(function(){});
+  audioPlaying=true;
+  var btn=document.getElementById('listenBtn');
+  btn.style.background='rgba(34,197,94,.2)';
+  btn.style.color='var(--green)';
+  btn.title='Stop listening';
+}
+
+function stopAudio(){
+  var audio=document.getElementById('expAudio');
+  audio.pause();
+  audio.src='';
+  audioPlaying=false;
+  var btn=document.getElementById('listenBtn');
+  if(btn){ btn.style.background=''; btn.style.color=''; btn.title='Listen to microphone'; }
 }
 
 function setBadge(src,cls,text){

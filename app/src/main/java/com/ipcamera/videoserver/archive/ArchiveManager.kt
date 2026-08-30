@@ -33,7 +33,7 @@ class ArchiveManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settings: AppSettings,
 ) {
-    private val sdf = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.US)
+    private val sdf = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US)
 
     val archiveDir: File
         get() = File(context.getExternalFilesDir(null), "archive").also { it.mkdirs() }
