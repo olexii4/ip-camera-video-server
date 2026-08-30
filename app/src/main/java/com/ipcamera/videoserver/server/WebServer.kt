@@ -170,6 +170,13 @@ class WebServer @Inject constructor(
                     call.respondText(json.encodeToString(StatusResponse(running = true, activeSessions = sessions)), ContentType.Application.Json)
                 }
 
+                // Finalize the current recording segment and start a new one
+                post("/api/files/finalize") {
+                    requireAuth(call) ?: return@post
+                    archiveManager.requestFinalize()
+                    call.respond(HttpStatusCode.OK, """{"finalizing":true}""")
+                }
+
                 // List archive files as JSON
                 get("/api/files") {
                     requireAuth(call) ?: return@get
@@ -729,7 +736,9 @@ function startAudio(){
   audioWs=new WebSocket(wsUrl);
   audioWs.binaryType='arraybuffer';
   audioWs.onmessage=function(e){
-    // Each message is a chunk of 16-bit signed PCM at 16kHz mono
+    // Resume if browser suspended the AudioContext (happens when tab loses focus)
+    if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
+    if(!audioCtx) return;
     var pcm16=new Int16Array(e.data);
     var f32=new Float32Array(pcm16.length);
     for(var i=0;i<pcm16.length;i++) f32[i]=pcm16[i]/32768.0;
@@ -739,14 +748,48 @@ function startAudio(){
     src.buffer=buf;
     src.connect(audioCtx.destination);
     var now=audioCtx.currentTime;
-    if(nextPlayTime<now) nextPlayTime=now+0.02; // resync if we fell behind
+    if(nextPlayTime<now) nextPlayTime=now+0.02;
     src.start(nextPlayTime);
     nextPlayTime+=buf.duration;
   };
-  audioWs.onclose=function(){ if(audioPlaying) stopAudio(); };
+  audioWs.onclose=function(){
+    audioWs=null;
+    if(!audioPlaying) return;
+    // Auto-reconnect after 500ms if still in "playing" state
+    setTimeout(function(){
+      if(audioPlaying && !audioWs) reconnectAudio();
+    }, 500);
+  };
   audioPlaying=true;
   var btn=document.getElementById('listenBtn');
   if(btn){ btn.style.background='rgba(34,197,94,.2)'; btn.style.color='var(--green)'; btn.title='Stop listening'; }
+}
+
+function reconnectAudio(){
+  if(!audioPlaying) return;
+  // Reuse existing AudioContext; only reconnect the WebSocket
+  nextPlayTime=audioCtx?audioCtx.currentTime+0.05:0;
+  var wsUrl=(location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+'/ws/audio'+(TOKEN?'?token='+TOKEN:'');
+  audioWs=new WebSocket(wsUrl);
+  audioWs.binaryType='arraybuffer';
+  audioWs.onmessage=function(e){
+    if(audioCtx && audioCtx.state==='suspended') audioCtx.resume();
+    if(!audioCtx) return;
+    var pcm16=new Int16Array(e.data);
+    var f32=new Float32Array(pcm16.length);
+    for(var i=0;i<pcm16.length;i++) f32[i]=pcm16[i]/32768.0;
+    var buf=audioCtx.createBuffer(1,f32.length,SAMPLE_RATE);
+    buf.copyToChannel(f32,0);
+    var src=audioCtx.createBufferSource();
+    src.buffer=buf; src.connect(audioCtx.destination);
+    var now=audioCtx.currentTime;
+    if(nextPlayTime<now) nextPlayTime=now+0.02;
+    src.start(nextPlayTime); nextPlayTime+=buf.duration;
+  };
+  audioWs.onclose=function(){
+    audioWs=null;
+    if(audioPlaying) setTimeout(function(){ if(audioPlaying&&!audioWs) reconnectAudio(); },500);
+  };
 }
 
 function stopAudio(){
@@ -796,15 +839,23 @@ function renderFiles(files){
     const deleteBtn=saving
       ?'<span class="btn btn-danger btn-sm btn-disabled" title="Cannot delete a file being recorded">🗑</span>'
       :'<button class="btn btn-danger btn-sm" onclick="deleteFile(\''+f.name+'\')">🗑</button>';
+    const finalizeBtn=saving
+      ?'<button class="btn btn-ghost btn-sm" onclick="finalizeSegment()" title="Finalize this segment and start a new file">✂ Split</button>'
+      :'';
     const savingBadge=saving
       ?'<span class="f-saving"><span class="f-saving-spin"></span>Saving…</span>'
       :'';
     return '<div class="file-row">'
       +'<span class="f-name">'+f.name+'</span>'
       +'<span class="f-meta">'+mb+' MB &nbsp;·&nbsp; '+date+'</span>'
-      +'<span class="f-act">'+savingBadge+downloadBtn+deleteBtn+'</span>'
+      +'<span class="f-act">'+savingBadge+finalizeBtn+downloadBtn+deleteBtn+'</span>'
       +'</div>';
   }).join('')+'</div>';
+}
+
+async function finalizeSegment(){
+  const r=await fetch('/api/files/finalize',{method:'POST',headers:authHeader()});
+  if(!r.ok) alert('Could not finalize — no active recording?');
 }
 
 async function deleteFile(name){
