@@ -126,7 +126,7 @@ class WebServer @Inject constructor(
                 }
 
                 // Returns which camera sources are physically present on this device
-                get("/cameras") {
+                get("/api/cameras") {
                     requireAuth(call) ?: return@get
                     val sources = cameraStreamManager.availableSources().map { it.id }
                     call.respondText(json.encodeToString(sources), ContentType.Application.Json)
@@ -157,21 +157,21 @@ class WebServer @Inject constructor(
                     }
                 }
 
-                get("/status") {
+                get("/api/status") {
                     requireAuth(call) ?: return@get
                     val sessions = sessionRegistry.activeSessions().map { SessionDto(it.username, it.remoteAddress, it.connectedAt) }
                     call.respondText(json.encodeToString(StatusResponse(running = true, activeSessions = sessions)), ContentType.Application.Json)
                 }
 
                 // List archive files as JSON
-                get("/files") {
+                get("/api/files") {
                     requireAuth(call) ?: return@get
                     val files = archiveManager.listFiles().map { FileDto(it.name, it.length(), it.lastModified()) }
                     call.respondText(json.encodeToString(files), ContentType.Application.Json)
                 }
 
                 // Download a single archive file
-                get("/files/download/{name}") {
+                get("/api/files/download/{name}") {
                     requireAuth(call) ?: return@get
                     val name = call.parameters["name"] ?: return@get call.respond(HttpStatusCode.BadRequest)
                     val file = safeArchiveFile(name) ?: return@get call.respond(HttpStatusCode.NotFound)
@@ -180,7 +180,7 @@ class WebServer @Inject constructor(
                 }
 
                 // Delete a single archive file
-                post("/files/delete/{name}") {
+                post("/api/files/delete/{name}") {
                     requireAuth(call) ?: return@post
                     val name = call.parameters["name"] ?: return@post call.respond(HttpStatusCode.BadRequest)
                     val file = safeArchiveFile(name) ?: return@post call.respond(HttpStatusCode.NotFound)
@@ -471,6 +471,7 @@ function connectWs(){
     try{
       const msg=JSON.parse(e.data);
       updateStatus(msg);
+      // When files tab is open, update it if WS says the list changed
       if(document.getElementById('files').classList.contains('on')) renderFiles(msg.files);
     }catch(_){}
   };
@@ -499,10 +500,11 @@ function updateStatus(msg){
 
 // ── CAMERAS ──
 async function loadCameras(){
-  const r=await fetch('/cameras',{headers:authHeader()});
-  SOURCES=r.ok?await r.json():['main'];
+  const r=await fetch('/api/cameras',{headers:authHeader()});
+  SOURCES=r.ok?await r.json().catch(()=>['main']):['main'];
   renderGrid();
-  // All cameras start in OFF state — user presses Play to start
+  // Auto-start the first available camera
+  if(SOURCES.length>0) activateCamera(SOURCES[0]);
 }
 
 var SVG_EXPAND='<svg viewBox="0 0 448 512" fill="currentColor"><path d="M0 180V56c0-13.3 10.7-24 24-24h124c6.6 0 12 5.4 12 12v40c0 6.6-5.4 12-12 12H64v84c0 6.6-5.4 12-12 12H12c-6.6 0-12-5.4-12-12zM288 44v40c0 6.6 5.4 12 12 12h84v84c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12V56c0-13.3-10.7-24-24-24H300c-6.6 0-12 5.4-12 12zm148 276h-40c-6.6 0-12 5.4-12 12v84h-84c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h124c13.3 0 24-10.7 24-24V332c0-6.6-5.4-12-12-12zM160 468v-40c0-6.6-5.4-12-12-12H64v-84c0-6.6-5.4-12-12-12H12c-6.6 0-12 5.4-12 12v124c0 13.3 10.7 24 24 24h124c6.6 0 12-5.4 12-12z"/></svg>';
@@ -732,11 +734,10 @@ function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 var cachedFiles=[];
 
 function loadFiles(){
-  // Show cached WS data immediately; fall back to HTTP if not yet available
-  if(cachedFiles.length>0){ renderFiles(cachedFiles); return; }
+  // Always fetch fresh from server; WS data updates the list in real time
   const list=document.getElementById('fileList');
   list.innerHTML='<div class="empty-state">Loading…</div>';
-  fetch('/files',{headers:authHeader()})
+  fetch('/api/files',{headers:authHeader()})
     .then(function(r){ return r.ok?r.json():Promise.reject(r); })
     .then(function(files){ renderFiles(files); })
     .catch(function(){ list.innerHTML='<div class="empty-state">Error loading files</div>'; });
@@ -758,7 +759,7 @@ function renderFiles(files){
       +'<span class="f-name">'+f.name+'</span>'
       +'<span class="f-meta">'+mb+' MB &nbsp;·&nbsp; '+date+'</span>'
       +'<span class="f-act">'
-      +'<a class="btn btn-ghost btn-sm" href="/files/download/'+enc+(TOKEN?'?token='+TOKEN:'')+'" download="'+f.name+'">⬇ Download</a>'
+      +'<a class="btn btn-ghost btn-sm" href="/api/files/download/'+enc+(TOKEN?'?token='+TOKEN:'')+'" download="'+f.name+'">⬇ Download</a>'
       +'<button class="btn btn-danger btn-sm" onclick="deleteFile(\''+f.name+'\')">🗑</button>'
       +'</span></div>';
   }).join('')+'</div>';
@@ -766,7 +767,7 @@ function renderFiles(files){
 
 async function deleteFile(name){
   if(!confirm('Delete '+name+'?')) return;
-  const r=await fetch('/files/delete/'+encodeURIComponent(name),{method:'POST',headers:authHeader()});
+  const r=await fetch('/api/files/delete/'+encodeURIComponent(name),{method:'POST',headers:authHeader()});
   if(r.ok){ cachedFiles=[]; loadFiles(); } else alert('Delete failed');
 }
 

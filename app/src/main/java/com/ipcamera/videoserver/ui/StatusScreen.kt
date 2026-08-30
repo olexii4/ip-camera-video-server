@@ -15,8 +15,9 @@ fun StatusScreen(vm: AppViewModel) {
     val isRunning by vm.isRunning.collectAsState()
     val localIp by vm.localIp.collectAsState()
     val port by vm.settings.serverPort.collectAsState(initial = 8080)
+    val sessions by vm.activeSessions.collectAsState()
     val context = LocalContext.current
-    val sessions = vm.activeSessions
+
     val sessionLabel = sessions.firstOrNull()
         ?.let { "${it.username}@${it.remoteAddress}" }
         ?: "—"

@@ -34,7 +34,7 @@ class AppViewModel @Inject constructor(
     val isRunning: StateFlow<Boolean> = CameraServerService.serverState
     val localIp: StateFlow<String> = CameraServerService.localIp
 
-    val activeSessions get() = sessionRegistry.activeSessions()
+    val activeSessions: StateFlow<List<com.ipcamera.videoserver.auth.SessionInfo>> = sessionRegistry.sessionsFlow
 
     private val _archiveFiles = MutableStateFlow<List<File>>(emptyList())
     val archiveFiles: StateFlow<List<File>> = _archiveFiles
