@@ -1,60 +1,114 @@
 package com.ipcamera.videoserver.archive
 
-import android.content.Context
+import android.graphics.BitmapFactory
+import android.media.MediaCodec
+import android.media.MediaCodecInfo
+import android.media.MediaFormat
+import android.media.MediaMuxer
 import android.media.MediaRecorder
 import android.os.Build
-import android.view.Surface
 import com.ipcamera.videoserver.camera.CameraSource
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.launch
 import java.io.File
+import java.nio.ByteBuffer
 
+private const val MIME = "video/avc"  // H.264
+private const val WIDTH = 640
+private const val HEIGHT = 480
+private const val FRAME_RATE = 15
+private const val BIT_RATE = 800_000
+private const val I_FRAME_INTERVAL = 2 // seconds
+private const val TIMEOUT_US = 10_000L
+
+/**
+ * Records JPEG frames from a SharedFlow into an MP4 file using MediaCodec + MediaMuxer.
+ * Does NOT require a Camera2 surface — works with the streaming JPEG flow directly.
+ */
 class SegmentRecorder(
-    private val context: Context,
     val source: CameraSource,
     private val outputFile: File,
     private val audioEnabled: Boolean = false,
 ) {
-    private var recorder: MediaRecorder? = null
+    private var muxer: MediaMuxer? = null
+    private var codec: MediaCodec? = null
+    private var videoTrack = -1
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var job: Job? = null
     private var started = false
 
-    fun prepare(): Surface {
-        val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            MediaRecorder(context)
-        } else {
-            @Suppress("DEPRECATION")
-            MediaRecorder()
+    fun startFrom(frames: SharedFlow<ByteArray>) {
+        val format = MediaFormat.createVideoFormat(MIME, WIDTH, HEIGHT).apply {
+            setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+            setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE)
+            setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE)
+            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL)
         }
-        if (audioEnabled) {
-            r.setAudioSource(MediaRecorder.AudioSource.MIC)
-        }
-        r.setVideoSource(MediaRecorder.VideoSource.SURFACE)
-        r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-        r.setVideoEncoder(MediaRecorder.VideoEncoder.H264)
-        r.setVideoEncodingBitRate(2_000_000)
-        r.setVideoFrameRate(25)
-        r.setVideoSize(1280, 720)
-        if (audioEnabled) {
-            r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            r.setAudioEncodingBitRate(128_000)
-            r.setAudioSamplingRate(44_100)
-        }
-        r.setOrientationHint(90)
-        r.setOutputFile(outputFile.absolutePath)
-        r.prepare()
-        recorder = r
-        return r.surface
-    }
+        val c = MediaCodec.createEncoderByType(MIME)
+        c.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        val inputSurface = c.createInputSurface()
+        c.start()
 
-    fun start() {
-        recorder?.start()
+        val mx = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        codec = c
+        muxer = mx
         started = true
+
+        val bufInfo = MediaCodec.BufferInfo()
+        var muxerStarted = false
+        var presentationUs = 0L
+
+        job = scope.launch {
+            // Draw each JPEG frame onto the encoder's input surface
+            frames.collect { jpeg ->
+                val bmp = runCatching {
+                    BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
+                }.getOrNull() ?: return@collect
+
+                val canvas = inputSurface.lockHardwareCanvas() ?: inputSurface.lockCanvas(null)
+                canvas.drawBitmap(bmp, null,
+                    android.graphics.RectF(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat()), null)
+                inputSurface.unlockCanvasAndPost(canvas)
+                bmp.recycle()
+                presentationUs += 1_000_000L / FRAME_RATE
+
+                // Drain encoder output
+                while (true) {
+                    val idx = c.dequeueOutputBuffer(bufInfo, TIMEOUT_US)
+                    if (idx == MediaCodec.INFO_TRY_AGAIN_LATER) break
+                    if (idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        videoTrack = mx.addTrack(c.outputFormat)
+                        mx.start()
+                        muxerStarted = true
+                        continue
+                    }
+                    if (idx >= 0) {
+                        val buf: ByteBuffer = c.getOutputBuffer(idx)!!
+                        if (muxerStarted && bufInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0) {
+                            bufInfo.presentationTimeUs = presentationUs
+                            mx.writeSampleData(videoTrack, buf, bufInfo)
+                        }
+                        c.releaseOutputBuffer(idx, false)
+                        if (bufInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
+                    }
+                }
+            }
+        }
     }
 
     fun stop() {
-        val r = recorder ?: return
-        recorder = null
-        if (started) {
-            try { r.stop() } catch (_: Exception) { outputFile.delete() }
-        }
-        try { r.release() } catch (_: Exception) {}
+        job?.cancel()
+        scope.cancel()
+        runCatching { codec?.signalEndOfInputStream() }
+        runCatching { codec?.stop(); codec?.release() }
+        runCatching { muxer?.stop(); muxer?.release() }
+        codec = null; muxer = null
+        if (outputFile.length() < 1024L) outputFile.delete() // delete empty/truncated files
     }
 }
+

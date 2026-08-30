@@ -134,25 +134,22 @@ class CameraServerService : LifecycleService() {
                 runCatching {
                     val outputFile = archiveManager.segmentFileName(source)
                     currentFile = outputFile
-                    recorder = SegmentRecorder(this@CameraServerService, source, outputFile, audioEnabled)
-                    val surface = recorder!!.prepare()
+                    // Record from the JPEG SharedFlow directly — no Camera2 surface integration needed
+                    recorder = SegmentRecorder(source, outputFile, audioEnabled)
                     archiveManager.markSaving(outputFile.name)
-                    cameraStreamManager.setRecordingSurface(source, surface)
-                    recorder!!.start()
+                    recorder!!.startFrom(cameraStreamManager.getStreamExclusive(source))
                     var elapsed = 0L
                     while (elapsed < 15 * 60 * 1000L && cameraStreamManager.isStreaming(source)) {
                         delay(1_000L)
                         elapsed += 1_000L
-                        if (archiveManager.consumeFinalize()) break // manual finalize requested
+                        if (archiveManager.consumeFinalize()) break
                     }
                     recorder!!.stop()
                     archiveManager.markDone(outputFile.name)
-                    cameraStreamManager.setRecordingSurface(source, null)
                     archiveManager.enforceRotation()
                 }.onFailure {
                     runCatching { recorder?.stop() }
                     currentFile?.let { archiveManager.markDone(it.name) }
-                    cameraStreamManager.setRecordingSurface(source, null)
                 }
                 delay(2_000L)
             }
