@@ -3,6 +3,7 @@ package com.ipcamera.videoserver.server
 import com.ipcamera.videoserver.archive.ArchiveManager
 import com.ipcamera.videoserver.audio.AudioStreamManager
 import com.ipcamera.videoserver.auth.AuthManager
+import com.ipcamera.videoserver.settings.AppSettings
 import com.ipcamera.videoserver.auth.SessionInfo
 import com.ipcamera.videoserver.auth.SessionRegistry
 import com.ipcamera.videoserver.camera.CameraSource
@@ -18,6 +19,7 @@ import io.ktor.server.websocket.*
 import io.ktor.utils.io.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -36,6 +38,7 @@ class WebServer @Inject constructor(
     private val cameraStreamManager: CameraStreamManager,
     private val archiveManager: ArchiveManager,
     private val audioStreamManager: AudioStreamManager,
+    private val settings: AppSettings,
 ) {
     private var server: ApplicationEngine? = null
 
@@ -118,8 +121,9 @@ class WebServer @Inject constructor(
                             .map { SessionDto(it.username, it.remoteAddress, it.connectedAt) }
                         val files = archiveManager.listFiles()
                             .map { FileDto(it.name, it.length(), it.lastModified(), archiveManager.isCurrentlySaving(it.name)) }
+                        val audioMonitor = settings.archiveAudioEnabled.first()
                         val msg = json.encodeToString(
-                            WsStatus(running = true, sessions = sessions, files = files)
+                            WsStatus(running = true, sessions = sessions, files = files, audioMonitorEnabled = audioMonitor)
                         )
                         send(Frame.Text(msg))
                     }
@@ -228,7 +232,7 @@ class WebServer @Inject constructor(
 @Serializable private data class StatusResponse(val running: Boolean, val activeSessions: List<SessionDto>)
 @Serializable private data class SessionDto(val username: String, val remoteAddress: String, val connectedAt: Long)
 @Serializable private data class FileDto(val name: String, val size: Long, val modified: Long, val saving: Boolean = false)
-@Serializable private data class WsStatus(val running: Boolean, val sessions: List<SessionDto>, val files: List<FileDto>)
+@Serializable private data class WsStatus(val running: Boolean, val sessions: List<SessionDto>, val files: List<FileDto>, val audioMonitorEnabled: Boolean = false)
 
 private val WEB_UI_HTML = """
 <!DOCTYPE html>
@@ -431,6 +435,7 @@ input:focus{border-color:var(--accent)}
 
 <script>
 let TOKEN='', SOURCES=[], activeSource=null, expandedSource=null, switching=false, ws=null;
+var AUDIO_MONITOR_DEFAULT=false; // reflects "Record microphone audio" setting
 var intentionallyOff=new Set(); // sources stopped on purpose — suppress onerror for these
 
 window.addEventListener('DOMContentLoaded', async ()=>{
@@ -502,6 +507,7 @@ function connectWs(){
 function updateStatus(msg){
   const dot=document.getElementById('liveDot');
   if(dot) dot.className='logo-dot'+(msg.running?'':' off');
+  if(typeof msg.audioMonitorEnabled !== 'undefined') AUDIO_MONITOR_DEFAULT=msg.audioMonitorEnabled;
 }
 
 // ── CAMERAS (unchanged) ──
@@ -686,8 +692,9 @@ function openPanel(src){
   expImg.src='/stream/'+src+(TOKEN?'?token='+TOKEN:'');
   panel.style.display='block';
   panel.scrollIntoView({behavior:'smooth',block:'nearest'});
-  // Stop audio if previously playing another source
+  // Auto-start audio if "Record microphone audio" is enabled in settings
   stopAudio();
+  if(AUDIO_MONITOR_DEFAULT) startAudio();
 }
 
 function compressPanel(){

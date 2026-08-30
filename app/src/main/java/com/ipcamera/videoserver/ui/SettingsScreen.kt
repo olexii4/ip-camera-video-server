@@ -24,8 +24,7 @@ fun SettingsScreen(vm: AppViewModel) {
     val smsNumber by vm.settings.smsTargetNumber.collectAsState(initial = "")
     val archiveMaxFiles by vm.settings.archiveMaxFiles.collectAsState(initial = 1440)
     val archiveMaxSizeGb by vm.settings.archiveMaxSizeGb.collectAsState(initial = 30)
-    val archiveEnabledMain by vm.settings.archiveEnabledMain.collectAsState(initial = false)
-    val archiveEnabledFront by vm.settings.archiveEnabledFront.collectAsState(initial = false)
+    val archiveEnabled by vm.settings.archiveEnabled.collectAsState(initial = false)
     val archiveAudioEnabled by vm.settings.archiveAudioEnabled.collectAsState(initial = false)
     val archiveAudioOnlyEnabled by vm.settings.archiveAudioOnlyEnabled.collectAsState(initial = false)
     val ftpEnabled by vm.settings.ftpEnabled.collectAsState(initial = false)
@@ -84,11 +83,8 @@ fun SettingsScreen(vm: AppViewModel) {
         DraftTextField("Target phone number", draftSms, KeyboardType.Phone) { draftSms = it }
 
         SectionHeader("Archive")
-        LabeledSwitch("Record main camera", archiveEnabledMain) {
-            scope.launch { vm.settings.setArchiveEnabledMain(it) }
-        }
-        LabeledSwitch("Record front camera", archiveEnabledFront) {
-            scope.launch { vm.settings.setArchiveEnabledFront(it) }
+        LabeledSwitch("Record camera (active stream)", archiveEnabled) {
+            scope.launch { vm.settings.setArchiveEnabled(it) }
         }
         LabeledSwitch("Record microphone audio", archiveAudioEnabled) {
             scope.launch { vm.settings.setArchiveAudioEnabled(it) }
