@@ -141,8 +141,8 @@ class CameraServerService : LifecycleService() {
                     recorder!!.start()
                     var elapsed = 0L
                     while (elapsed < 15 * 60 * 1000L && cameraStreamManager.isStreaming(source)) {
-                        delay(5_000L)
-                        elapsed += 5_000L
+                        delay(1_000L)
+                        elapsed += 1_000L
                         if (archiveManager.consumeFinalize()) break // manual finalize requested
                     }
                     recorder!!.stop()

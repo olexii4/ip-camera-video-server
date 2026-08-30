@@ -381,6 +381,14 @@ input:focus{border-color:var(--accent)}
 .f-saving-spin{width:10px;height:10px;border:2px solid rgba(245,158,11,.3);border-top-color:var(--amber);border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
 .btn-disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
 .empty-state{padding:40px;text-align:center;color:var(--muted);font-size:.85rem;line-height:1.6}
+/* ── TOASTS ── */
+#toastContainer{position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{padding:10px 16px;border-radius:8px;font-size:.82rem;font-weight:500;opacity:0;transform:translateY(10px);
+  transition:opacity .2s,transform .2s;pointer-events:none;max-width:320px;word-break:break-word}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.ok{background:#166534;color:#dcfce7;border:1px solid #16a34a}
+.toast.err{background:#7f1d1d;color:#fee2e2;border:1px solid #ef4444}
+.toast.info{background:#1e3a5f;color:#bfdbfe;border:1px solid #3b82f6}
 </style>
 </head>
 <body>
@@ -442,9 +450,25 @@ input:focus{border-color:var(--accent)}
   </div>
 </div>
 
+<div id="toastContainer"></div>
+
 <script>
 let TOKEN='', SOURCES=[], activeSource=null, expandedSource=null, switching=false, ws=null;
 var AUDIO_MONITOR_DEFAULT=false; // reflects "Record microphone audio" setting
+
+function toast(msg, type, ms){
+  type=type||'info'; ms=ms||3000;
+  var c=document.getElementById('toastContainer');
+  var t=document.createElement('div');
+  t.className='toast '+type;
+  t.textContent=msg;
+  c.appendChild(t);
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){ t.classList.add('show'); }); });
+  setTimeout(function(){
+    t.classList.remove('show');
+    setTimeout(function(){ c.removeChild(t); }, 250);
+  }, ms);
+}
 var intentionallyOff=new Set(); // sources stopped on purpose — suppress onerror for these
 
 window.addEventListener('DOMContentLoaded', async ()=>{
@@ -854,14 +878,22 @@ function renderFiles(files){
 }
 
 async function finalizeSegment(){
-  const r=await fetch('/api/files/finalize',{method:'POST',headers:authHeader()});
-  if(!r.ok) alert('Could not finalize — no active recording?');
+  const r=await fetch('/api/files/finalize',{method:'POST',headers:authHeader()}).catch(function(){return null;});
+  if(!r){ toast('Network error — could not reach server','err'); return; }
+  if(r.ok){
+    toast('Splitting segment… new file will appear shortly','info',4000);
+  } else {
+    const body=await r.text().catch(()=>'');
+    toast('Split failed: '+(body||r.status),'err');
+  }
 }
 
 async function deleteFile(name){
   if(!confirm('Delete '+name+'?')) return;
-  const r=await fetch('/api/files/delete/'+encodeURIComponent(name),{method:'POST',headers:authHeader()});
-  if(r.ok){ cachedFiles=[]; loadFiles(); } else alert('Delete failed');
+  const r=await fetch('/api/files/delete/'+encodeURIComponent(name),{method:'POST',headers:authHeader()}).catch(function(){return null;});
+  if(!r){ toast('Network error','err'); return; }
+  if(r.ok){ cachedFiles=[]; loadFiles(); toast('File deleted','ok'); }
+  else toast('Delete failed: '+r.status,'err');
 }
 
 // ── NAV ──
