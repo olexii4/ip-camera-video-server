@@ -26,6 +26,7 @@ fun SettingsScreen(vm: AppViewModel) {
     val archiveMaxSizeGb by vm.settings.archiveMaxSizeGb.collectAsState(initial = 30)
     val archiveEnabledMain by vm.settings.archiveEnabledMain.collectAsState(initial = false)
     val archiveEnabledFront by vm.settings.archiveEnabledFront.collectAsState(initial = false)
+    val archiveAudioEnabled by vm.settings.archiveAudioEnabled.collectAsState(initial = false)
     val ftpEnabled by vm.settings.ftpEnabled.collectAsState(initial = false)
     val ftpPort by vm.settings.ftpPort.collectAsState(initial = 2121)
     val ftpsEnabled by vm.settings.ftpsEnabled.collectAsState(initial = false)
@@ -87,6 +88,16 @@ fun SettingsScreen(vm: AppViewModel) {
         }
         LabeledSwitch("Record front camera", archiveEnabledFront) {
             scope.launch { vm.settings.setArchiveEnabledFront(it) }
+        }
+        LabeledSwitch("Record microphone audio", archiveAudioEnabled) {
+            scope.launch { vm.settings.setArchiveAudioEnabled(it) }
+        }
+        if (archiveAudioEnabled) {
+            Text(
+                "Audio is recorded from the device microphone into the same MP4 file.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         DraftTextField("Max files", draftMaxFiles, KeyboardType.Number) { draftMaxFiles = it }
         DraftTextField("Max storage (GB)", draftMaxSizeGb, KeyboardType.Number) { draftMaxSizeGb = it }

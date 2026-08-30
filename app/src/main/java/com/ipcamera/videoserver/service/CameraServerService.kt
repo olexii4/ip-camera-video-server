@@ -102,12 +102,13 @@ class CameraServerService : LifecycleService() {
             _localIp.value = resolveLocalIp()
             _serverState.value = true
 
-            startArchiveIfEnabled(CameraSource.MAIN, settings.archiveEnabledMain.first())
-            startArchiveIfEnabled(CameraSource.FRONT, settings.archiveEnabledFront.first())
+            val audioEnabled = settings.archiveAudioEnabled.first()
+            startArchiveIfEnabled(CameraSource.MAIN, settings.archiveEnabledMain.first(), audioEnabled)
+            startArchiveIfEnabled(CameraSource.FRONT, settings.archiveEnabledFront.first(), audioEnabled)
         }
     }
 
-    private fun startArchiveIfEnabled(source: CameraSource, enabled: Boolean) {
+    private fun startArchiveIfEnabled(source: CameraSource, enabled: Boolean, audioEnabled: Boolean = false) {
         if (!enabled) return
         archiveJobs[source]?.cancel()
         archiveJobs[source] = lifecycleScope.launch {
@@ -119,7 +120,7 @@ class CameraServerService : LifecycleService() {
                 var recorder: SegmentRecorder? = null
                 runCatching {
                     val outputFile = archiveManager.segmentFileName(source)
-                    recorder = SegmentRecorder(this@CameraServerService, source, outputFile)
+                    recorder = SegmentRecorder(this@CameraServerService, source, outputFile, audioEnabled)
                     val surface = recorder!!.prepare()
                     cameraStreamManager.setRecordingSurface(source, surface)
                     recorder!!.start()
