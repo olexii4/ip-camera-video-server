@@ -26,8 +26,9 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         val SMS_SIM_SLOT = intPreferencesKey("sms_sim_slot")
         val IP_POLL_INTERVAL_MINUTES = intPreferencesKey("ip_poll_interval_minutes")
         val LAST_KNOWN_PUBLIC_IP = stringPreferencesKey("last_known_public_ip")
-        val ARCHIVE_ENABLED_MAIN = booleanPreferencesKey("archive_enabled_main")
-        val ARCHIVE_ENABLED_FRONT = booleanPreferencesKey("archive_enabled_front")
+        val ARCHIVE_ENABLED = booleanPreferencesKey("archive_enabled")
+        val ARCHIVE_ENABLED_MAIN = booleanPreferencesKey("archive_enabled_main")   // legacy
+        val ARCHIVE_ENABLED_FRONT = booleanPreferencesKey("archive_enabled_front") // legacy
         val ARCHIVE_AUDIO_ENABLED = booleanPreferencesKey("archive_audio_enabled")
         val ARCHIVE_AUDIO_ONLY_ENABLED = booleanPreferencesKey("archive_audio_only_enabled")
         val ARCHIVE_MAX_FILES = intPreferencesKey("archive_max_files")
@@ -48,6 +49,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
     val smsSimSlot: Flow<Int> = context.dataStore.data.map { it[Keys.SMS_SIM_SLOT] ?: 0 }
     val ipPollIntervalMinutes: Flow<Int> = context.dataStore.data.map { it[Keys.IP_POLL_INTERVAL_MINUTES] ?: 5 }
     val lastKnownPublicIp: Flow<String> = context.dataStore.data.map { it[Keys.LAST_KNOWN_PUBLIC_IP] ?: "" }
+    val archiveEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.ARCHIVE_ENABLED] ?: false }
     val archiveEnabledMain: Flow<Boolean> = context.dataStore.data.map { it[Keys.ARCHIVE_ENABLED_MAIN] ?: false }
     val archiveEnabledFront: Flow<Boolean> = context.dataStore.data.map { it[Keys.ARCHIVE_ENABLED_FRONT] ?: false }
     val archiveAudioEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.ARCHIVE_AUDIO_ENABLED] ?: false }
@@ -69,6 +71,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
     suspend fun setSmsSimSlot(slot: Int) = context.dataStore.edit { it[Keys.SMS_SIM_SLOT] = slot }
     suspend fun setIpPollIntervalMinutes(minutes: Int) = context.dataStore.edit { it[Keys.IP_POLL_INTERVAL_MINUTES] = minutes }
     suspend fun setLastKnownPublicIp(ip: String) = context.dataStore.edit { it[Keys.LAST_KNOWN_PUBLIC_IP] = ip }
+    suspend fun setArchiveEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.ARCHIVE_ENABLED] = enabled }
     suspend fun setArchiveEnabledMain(enabled: Boolean) = context.dataStore.edit { it[Keys.ARCHIVE_ENABLED_MAIN] = enabled }
     suspend fun setArchiveEnabledFront(enabled: Boolean) = context.dataStore.edit { it[Keys.ARCHIVE_ENABLED_FRONT] = enabled }
     suspend fun setArchiveAudioEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.ARCHIVE_AUDIO_ENABLED] = enabled }

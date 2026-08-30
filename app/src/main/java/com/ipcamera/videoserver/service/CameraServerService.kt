@@ -104,21 +104,24 @@ class CameraServerService : LifecycleService() {
             _serverState.value = true
 
             val audioEnabled = settings.archiveAudioEnabled.first()
-            startArchiveIfEnabled(CameraSource.MAIN, settings.archiveEnabledMain.first(), audioEnabled)
-            startArchiveIfEnabled(CameraSource.FRONT, settings.archiveEnabledFront.first(), audioEnabled)
+            if (settings.archiveEnabled.first()) startActiveCameraArchive(audioEnabled)
             if (settings.archiveAudioOnlyEnabled.first()) startAudioOnlyArchive()
         }
     }
 
-    private fun startArchiveIfEnabled(source: CameraSource, enabled: Boolean, audioEnabled: Boolean = false) {
-        if (!enabled) return
-        archiveJobs[source]?.cancel()
-        archiveJobs[source] = lifecycleScope.launch {
+    private fun startActiveCameraArchive(audioEnabled: Boolean) {
+        archiveJobs[CameraSource.MAIN]?.cancel()
+        archiveJobs[CameraSource.MAIN] = lifecycleScope.launch {
             while (true) {
-                // Wait until someone is actively streaming this camera
-                while (!cameraStreamManager.isStreaming(source)) {
+                // Find whichever camera is currently being streamed
+                val source = listOf(CameraSource.MAIN, CameraSource.FRONT)
+                    .firstOrNull { cameraStreamManager.isStreaming(it) }
+
+                if (source == null) {
                     delay(3_000L)
+                    continue
                 }
+
                 var recorder: SegmentRecorder? = null
                 var currentFile: java.io.File? = null
                 runCatching {
