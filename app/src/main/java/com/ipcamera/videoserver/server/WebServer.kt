@@ -339,7 +339,7 @@ input:focus{border-color:var(--accent)}
   border:2px solid var(--accent);border-radius:10px;
   overflow:hidden;position:relative;
 }
-#expandedPanel img{width:100%;height:60vh;object-fit:contain;background:#050810;display:block}
+#expandedPanel img{width:100%;max-width:710px;height:auto;max-height:542px;object-fit:contain;background:#050810;display:block}
 #expandedPanel .exp-header{
   display:flex;align-items:center;gap:8px;padding:8px 14px;
   background:rgba(0,0,0,.6);position:absolute;top:0;left:0;right:0;z-index:2;
