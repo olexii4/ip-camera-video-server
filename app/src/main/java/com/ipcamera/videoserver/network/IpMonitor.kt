@@ -26,22 +26,28 @@ class IpMonitor @AssistedInject constructor(
         val lastIp = settings.lastKnownPublicIp.first()
 
         if (currentIp != lastIp) {
-            settings.setLastKnownPublicIp(currentIp)
-            val targetNumber = settings.smsTargetNumber.first()
-            val port = settings.serverPort.first()
-            val simSlot = settings.smsSimSlot.first()
-            if (targetNumber.isNotBlank()) {
-                smsNotifier.send(
-                    targetNumber,
-                    "[CameraServer] IP changed. Connect at: http://$currentIp:$port",
-                    simSlot,
-                )
-            }
+            handleIpChange(
+                newIp = currentIp,
+                targetNumber = settings.smsTargetNumber.first(),
+                port = settings.serverPort.first(),
+                simSlot = settings.smsSimSlot.first(),
+            )
         }
         return Result.success()
     }
 
-    private suspend fun fetchPublicIp(): String? = withContext(Dispatchers.IO) {
+    internal suspend fun handleIpChange(newIp: String, targetNumber: String, port: Int, simSlot: Int) {
+        settings.setLastKnownPublicIp(newIp)
+        if (targetNumber.isNotBlank()) {
+            smsNotifier.send(
+                targetNumber,
+                "[CameraServer] IP changed. Connect at: http://$newIp:$port",
+                simSlot,
+            )
+        }
+    }
+
+    internal suspend fun fetchPublicIp(): String? = withContext(Dispatchers.IO) {
         runCatching {
             val json = URL("https://api64.ipify.org?format=json").readText(Charsets.UTF_8)
             JSONObject(json).getString("ip")
