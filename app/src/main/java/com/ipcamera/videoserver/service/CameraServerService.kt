@@ -120,23 +120,27 @@ class CameraServerService : LifecycleService() {
                     delay(3_000L)
                 }
                 var recorder: SegmentRecorder? = null
+                var currentFile: java.io.File? = null
                 runCatching {
                     val outputFile = archiveManager.segmentFileName(source)
+                    currentFile = outputFile
                     recorder = SegmentRecorder(this@CameraServerService, source, outputFile, audioEnabled)
                     val surface = recorder!!.prepare()
+                    archiveManager.markSaving(outputFile.name)
                     cameraStreamManager.setRecordingSurface(source, surface)
                     recorder!!.start()
-                    // Record for 30 min or until nobody is watching
                     var elapsed = 0L
                     while (elapsed < 15 * 60 * 1000L && cameraStreamManager.isStreaming(source)) {
                         delay(5_000L)
                         elapsed += 5_000L
                     }
                     recorder!!.stop()
+                    archiveManager.markDone(outputFile.name)
                     cameraStreamManager.setRecordingSurface(source, null)
                     archiveManager.enforceRotation()
                 }.onFailure {
                     runCatching { recorder?.stop() }
+                    currentFile?.let { archiveManager.markDone(it.name) }
                     cameraStreamManager.setRecordingSurface(source, null)
                 }
                 delay(2_000L)
@@ -149,15 +153,20 @@ class CameraServerService : LifecycleService() {
         archiveJobs[CameraSource.USB] = lifecycleScope.launch {
             while (true) {
                 var recorder: AudioSegmentRecorder? = null
+                var currentFile: java.io.File? = null
                 runCatching {
                     val outputFile = archiveManager.audioSegmentFileName()
+                    currentFile = outputFile
                     recorder = AudioSegmentRecorder(this@CameraServerService, outputFile)
+                    archiveManager.markSaving(outputFile.name)
                     recorder!!.start()
                     delay(15 * 60 * 1000L)
                     recorder!!.stop()
+                    archiveManager.markDone(outputFile.name)
                     archiveManager.enforceRotation()
                 }.onFailure {
                     runCatching { recorder?.stop() }
+                    currentFile?.let { archiveManager.markDone(it.name) }
                 }
                 delay(2_000L)
             }

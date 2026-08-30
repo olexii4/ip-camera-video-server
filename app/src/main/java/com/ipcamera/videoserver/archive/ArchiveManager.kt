@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.first
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,12 +35,17 @@ class ArchiveManager @Inject constructor(
     private val settings: AppSettings,
 ) {
     private val sdf = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US)
+    private val savingFiles: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     val archiveDir: File
         get() = File(context.getExternalFilesDir(null), "archive").also { it.mkdirs() }
 
+    fun markSaving(fileName: String) { savingFiles.add(fileName) }
+    fun markDone(fileName: String) { savingFiles.remove(fileName) }
+    fun isCurrentlySaving(fileName: String): Boolean = savingFiles.contains(fileName)
+
     fun listFiles(): List<File> =
-        archiveDir.listFiles { f -> f.extension == "mp4" }
+        archiveDir.listFiles { f -> f.extension == "mp4" || f.extension == "m4a" }
             ?.sortedByDescending { it.lastModified() }
             ?: emptyList()
 

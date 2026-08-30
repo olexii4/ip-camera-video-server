@@ -166,7 +166,9 @@ class WebServer @Inject constructor(
                 // List archive files as JSON
                 get("/api/files") {
                     requireAuth(call) ?: return@get
-                    val files = archiveManager.listFiles().map { FileDto(it.name, it.length(), it.lastModified()) }
+                    val files = archiveManager.listFiles().map {
+                        FileDto(it.name, it.length(), it.lastModified(), archiveManager.isCurrentlySaving(it.name))
+                    }
                     call.respondText(json.encodeToString(files), ContentType.Application.Json)
                 }
 
@@ -222,7 +224,7 @@ class WebServer @Inject constructor(
 @Serializable private data class TokenResponse(val access_token: String, val token_type: String, val expires_in: Int)
 @Serializable private data class StatusResponse(val running: Boolean, val activeSessions: List<SessionDto>)
 @Serializable private data class SessionDto(val username: String, val remoteAddress: String, val connectedAt: Long)
-@Serializable private data class FileDto(val name: String, val size: Long, val modified: Long)
+@Serializable private data class FileDto(val name: String, val size: Long, val modified: Long, val saving: Boolean = false)
 @Serializable private data class WsStatus(val running: Boolean, val sessions: List<SessionDto>, val files: List<FileDto>)
 
 private val WEB_UI_HTML = """
@@ -358,6 +360,9 @@ input:focus{border-color:var(--accent)}
 .f-name{flex:1;font-size:.83rem;word-break:break-all;min-width:100px}
 .f-meta{font-size:.73rem;color:var(--muted);white-space:nowrap}
 .f-act{display:flex;gap:6px;flex-shrink:0}
+.f-saving{font-size:.72rem;color:var(--amber);display:flex;align-items:center;gap:4px;padding:0 4px}
+.f-saving-spin{width:10px;height:10px;border:2px solid rgba(245,158,11,.3);border-top-color:var(--amber);border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
+.btn-disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
 .empty-state{padding:40px;text-align:center;color:var(--muted);font-size:.85rem;line-height:1.6}
 </style>
 </head>
@@ -755,13 +760,21 @@ function renderFiles(files){
     const mb=(f.size/1048576).toFixed(1);
     const date=new Date(f.modified).toLocaleString();
     const enc=encodeURIComponent(f.name);
+    const saving=f.saving||false;
+    const savingBadge=saving
+      ?'<span class="f-saving"><span class="f-saving-spin"></span>Saving…</span>'
+      :'';
+    const downloadBtn=saving
+      ?'<span class="btn btn-ghost btn-sm btn-disabled" title="File is still being recorded">⬇ Saving…</span>'
+      :'<a class="btn btn-ghost btn-sm" href="/api/files/download/'+enc+(TOKEN?'?token='+TOKEN:'')+'" download="'+f.name+'">⬇ Download</a>';
+    const deleteBtn=saving
+      ?'<span class="btn btn-danger btn-sm btn-disabled" title="Cannot delete a file being recorded">🗑</span>'
+      :'<button class="btn btn-danger btn-sm" onclick="deleteFile(\''+f.name+'\')">🗑</button>';
     return '<div class="file-row">'
-      +'<span class="f-name">'+f.name+'</span>'
+      +'<span class="f-name">'+f.name+savingBadge+'</span>'
       +'<span class="f-meta">'+mb+' MB &nbsp;·&nbsp; '+date+'</span>'
-      +'<span class="f-act">'
-      +'<a class="btn btn-ghost btn-sm" href="/api/files/download/'+enc+(TOKEN?'?token='+TOKEN:'')+'" download="'+f.name+'">⬇ Download</a>'
-      +'<button class="btn btn-danger btn-sm" onclick="deleteFile(\''+f.name+'\')">🗑</button>'
-      +'</span></div>';
+      +'<span class="f-act">'+downloadBtn+deleteBtn+'</span>'
+      +'</div>';
   }).join('')+'</div>';
 }
 
