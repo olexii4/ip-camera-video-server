@@ -29,6 +29,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
         val ARCHIVE_ENABLED_MAIN = booleanPreferencesKey("archive_enabled_main")
         val ARCHIVE_ENABLED_FRONT = booleanPreferencesKey("archive_enabled_front")
         val ARCHIVE_AUDIO_ENABLED = booleanPreferencesKey("archive_audio_enabled")
+        val ARCHIVE_AUDIO_ONLY_ENABLED = booleanPreferencesKey("archive_audio_only_enabled")
         val ARCHIVE_MAX_FILES = intPreferencesKey("archive_max_files")
         val ARCHIVE_MAX_SIZE_GB = intPreferencesKey("archive_max_size_gb")
         val FTP_ENABLED = booleanPreferencesKey("ftp_enabled")
@@ -50,6 +51,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
     val archiveEnabledMain: Flow<Boolean> = context.dataStore.data.map { it[Keys.ARCHIVE_ENABLED_MAIN] ?: false }
     val archiveEnabledFront: Flow<Boolean> = context.dataStore.data.map { it[Keys.ARCHIVE_ENABLED_FRONT] ?: false }
     val archiveAudioEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.ARCHIVE_AUDIO_ENABLED] ?: false }
+    val archiveAudioOnlyEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.ARCHIVE_AUDIO_ONLY_ENABLED] ?: false }
     val archiveMaxFiles: Flow<Int> = context.dataStore.data.map { it[Keys.ARCHIVE_MAX_FILES] ?: 1440 }
     val archiveMaxSizeGb: Flow<Int> = context.dataStore.data.map { it[Keys.ARCHIVE_MAX_SIZE_GB] ?: 30 }
     val ftpEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.FTP_ENABLED] ?: false }
@@ -70,6 +72,7 @@ class AppSettings @Inject constructor(@ApplicationContext private val context: C
     suspend fun setArchiveEnabledMain(enabled: Boolean) = context.dataStore.edit { it[Keys.ARCHIVE_ENABLED_MAIN] = enabled }
     suspend fun setArchiveEnabledFront(enabled: Boolean) = context.dataStore.edit { it[Keys.ARCHIVE_ENABLED_FRONT] = enabled }
     suspend fun setArchiveAudioEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.ARCHIVE_AUDIO_ENABLED] = enabled }
+    suspend fun setArchiveAudioOnlyEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.ARCHIVE_AUDIO_ONLY_ENABLED] = enabled }
     suspend fun setArchiveMaxFiles(max: Int) = context.dataStore.edit { it[Keys.ARCHIVE_MAX_FILES] = max }
     suspend fun setArchiveMaxSizeGb(gb: Int) = context.dataStore.edit { it[Keys.ARCHIVE_MAX_SIZE_GB] = gb }
     suspend fun setFtpEnabled(enabled: Boolean) = context.dataStore.edit { it[Keys.FTP_ENABLED] = enabled }

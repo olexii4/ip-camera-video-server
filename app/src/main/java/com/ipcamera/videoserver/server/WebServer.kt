@@ -48,7 +48,14 @@ class WebServer @Inject constructor(
             routing {
                 get("/ping") { call.respondText("pong") }
 
-                get("/") { call.respondText(WEB_UI_HTML, ContentType.Text.Html) }
+                // Redirect root to /cameras
+                get("/") {
+                    call.response.header(HttpHeaders.Location, "/cameras")
+                    call.respond(HttpStatusCode.Found)
+                }
+                // Both tabs are served by the same SPA; path detected in JS
+                get("/cameras") { call.respondText(WEB_UI_HTML, ContentType.Text.Html) }
+                get("/files") { call.respondText(WEB_UI_HTML, ContentType.Text.Html) }
 
                 // Tells the web UI whether login is required
                 get("/auth-config") {
@@ -408,7 +415,6 @@ input:focus{border-color:var(--accent)}
 
   <div id="files" class="page">
     <div id="fileTools">
-      <button class="btn btn-ghost btn-sm" onclick="loadFiles()">↻ Refresh</button>
       <span id="fileCount"></span>
     </div>
     <div id="fileList"><div class="empty-state">Loading…</div></div>
@@ -423,6 +429,11 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   const cfg = await fetch('/auth-config').then(r=>r.json()).catch(()=>({authRequired:true}));
   if(!cfg.authRequired){ TOKEN=''; enterApp(); }
   document.getElementById('pass').addEventListener('keydown', e=>{ if(e.key==='Enter') login(); });
+  // Handle browser back/forward
+  window.addEventListener('popstate', function(){
+    var tab=window.location.pathname.replace('/','') || 'cameras';
+    activateTab(tab);
+  });
 });
 
 async function login(){
@@ -439,7 +450,11 @@ async function login(){
 async function enterApp(){
   document.getElementById('loginPage').style.display='none';
   document.getElementById('appShell').style.display='block';
+  // Activate the tab matching the current URL path
+  var initialTab=window.location.pathname.replace('/','') || 'cameras';
+  if(initialTab!=='cameras' && initialTab!=='files') initialTab='cameras';
   await loadCameras();
+  activateTab(initialTab);
   connectWs();
 }
 
@@ -757,10 +772,19 @@ async function deleteFile(name){
 
 // ── NAV ──
 function showTab(id,btn){
+  history.pushState(null,'','/'+id);
+  activateTab(id);
+}
+
+function activateTab(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));
-  document.getElementById(id).classList.add('on');
-  btn.classList.add('on');
+  var page=document.getElementById(id);
+  if(page) page.classList.add('on');
+  // Match tab button by its onclick attribute
+  document.querySelectorAll('nav .tab').forEach(function(b){
+    if(b.getAttribute('onclick') && b.getAttribute('onclick').indexOf("'"+id+"'")>=0) b.classList.add('on');
+  });
   if(id==='files') loadFiles();
 }
 

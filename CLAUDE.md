@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Before starting any work
+
+Read these project-specific rules and skills first — they override defaults:
+
+- **`.claude/rules/development-conventions.md`** — commit message format, permitted trailers, code style rules. Always follow before making any commit.
+- **`.claude/skills/commit.md`** — commit template and rules. Use when creating any commit.
+- **`.claude/skills/run.md`** — how to build, install, and run the app on a connected device. Use before running the app.
+
 ## What this project is
 
 An Android application (`com.ipcamera.videoserver`) that turns a phone into a self-hosted IP camera server. It streams MJPEG video from on-device cameras over HTTP, protects endpoints with JWT auth, records MP4 archives to device storage, serves recorded files via an embedded FTP server, and sends SMS alerts when the device's public IP changes.
@@ -71,13 +79,6 @@ Single `MainActivity` with a bottom-nav `NavHost` (`status`, `settings`, `archiv
 
 Subject line ≤ 50 chars, conventional commits (`feat`, `fix`, `chore`, `refactor`, `test`, `docs`).
 
-Permitted trailers only — no `Co-Authored-By`:
-
-```
-Assisted-by: Claude Sonnet 4.6
-Signed-off-by: Oleksii Orel <oorel@redhat.com>
-```
-
 Do not add AI explanation comments inside source code.
 
 ## Key constraints
@@ -88,4 +89,3 @@ Do not add AI explanation comments inside source code.
 - `IpMonitor` is a `@HiltWorker` using `@AssistedInject` — the WorkManager Hilt integration requires both `hilt-work` and `hilt-work-compiler` KSP dependencies.
 - `META-INF/INDEX.LIST` and `META-INF/io.netty.versions.properties` must be excluded in `packaging` (Ktor/Netty conflict).
 - WorkManager's minimum periodic interval is 15 minutes; `IpMonitor.schedule` clamps the user-configured value with `coerceAtLeast(15)`.
-- `openspec/docs/*.md` must not be added to commits.

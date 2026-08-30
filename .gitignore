@@ -29,8 +29,5 @@ google-services.json
 # Logs
 *.log
 
-# Plans and internal docs (not part of deliverable)
-docs/superpowers/
-
 # macOS
 .DS_Store

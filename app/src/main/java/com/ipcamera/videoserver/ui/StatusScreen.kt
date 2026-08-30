@@ -17,6 +17,9 @@ fun StatusScreen(vm: AppViewModel) {
     val port by vm.settings.serverPort.collectAsState(initial = 8080)
     val context = LocalContext.current
     val sessions = vm.activeSessions
+    val sessionLabel = sessions.firstOrNull()
+        ?.let { "${it.username}@${it.remoteAddress}" }
+        ?: "—"
 
     Column(
         modifier = Modifier
@@ -29,14 +32,7 @@ fun StatusScreen(vm: AppViewModel) {
         StatusRow("Status", if (isRunning) "Running" else "Stopped")
         StatusRow("Local IP", localIp.ifEmpty { "—" })
         StatusRow("Port", port.toString())
-        StatusRow("Active sessions", sessions.size.toString())
-
-        sessions.forEach { s ->
-            Text(
-                "  • ${s.username} @ ${s.remoteAddress}",
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
+        StatusRow("Active session", sessionLabel)
 
         if (isRunning && localIp.isNotEmpty()) {
             val url = "http://$localIp:$port"

@@ -13,6 +13,7 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.ipcamera.videoserver.R
 import com.ipcamera.videoserver.archive.ArchiveManager
+import com.ipcamera.videoserver.archive.AudioSegmentRecorder
 import com.ipcamera.videoserver.archive.SegmentRecorder
 import com.ipcamera.videoserver.auth.AuthManager
 import com.ipcamera.videoserver.camera.CameraSource
@@ -105,6 +106,7 @@ class CameraServerService : LifecycleService() {
             val audioEnabled = settings.archiveAudioEnabled.first()
             startArchiveIfEnabled(CameraSource.MAIN, settings.archiveEnabledMain.first(), audioEnabled)
             startArchiveIfEnabled(CameraSource.FRONT, settings.archiveEnabledFront.first(), audioEnabled)
+            if (settings.archiveAudioOnlyEnabled.first()) startAudioOnlyArchive()
         }
     }
 
@@ -136,6 +138,26 @@ class CameraServerService : LifecycleService() {
                 }.onFailure {
                     runCatching { recorder?.stop() }
                     cameraStreamManager.setRecordingSurface(source, null)
+                }
+                delay(2_000L)
+            }
+        }
+    }
+
+    private fun startAudioOnlyArchive() {
+        archiveJobs[CameraSource.USB]?.cancel() // reuse USB slot for audio-only job
+        archiveJobs[CameraSource.USB] = lifecycleScope.launch {
+            while (true) {
+                var recorder: AudioSegmentRecorder? = null
+                runCatching {
+                    val outputFile = archiveManager.audioSegmentFileName()
+                    recorder = AudioSegmentRecorder(this@CameraServerService, outputFile)
+                    recorder!!.start()
+                    delay(15 * 60 * 1000L)
+                    recorder!!.stop()
+                    archiveManager.enforceRotation()
+                }.onFailure {
+                    runCatching { recorder?.stop() }
                 }
                 delay(2_000L)
             }

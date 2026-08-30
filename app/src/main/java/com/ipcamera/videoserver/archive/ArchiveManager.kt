@@ -52,4 +52,7 @@ class ArchiveManager @Inject constructor(
 
     fun segmentFileName(source: CameraSource): File =
         File(archiveDir, "${sdf.format(Date())}_${source.id}.mp4")
+
+    fun audioSegmentFileName(): File =
+        File(archiveDir, "${sdf.format(Date())}_audio.m4a")
 }

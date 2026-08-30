@@ -24,7 +24,7 @@ No cloud, no subscription, no account. The phone runs its own HTTP server. You c
 
 ## Target hardware
 
-Primary target: **Huawei P20 Lite** (Android 8.0+, dual front/rear camera).
+Primary target: **Huawei P20 Lite** — 4/64 GB, a very popular mid-range smartphone released in 2018 running Android 8.0+ with a dual rear camera and a 16 MP front camera.
 
 Works on any Android 8.0+ phone. Dual-camera phones give you two independent streams; single-camera phones give you one. USB OTG support adds a third stream from a UVC webcam.
 
@@ -125,9 +125,9 @@ Then connect directly at `http://<phone-ip>:8080` from any device.
 
 With the USB cable connected:
 ```bash
-./scripts/relay.sh
+./scripts/local-run.sh
 ```
-This relays `<mac-ip>:8080` → phone via USB tunnel. Other devices on the same WiFi can connect to the Mac's IP instead of the phone's IP. See `scripts/relay.sh` for details.
+This relays `<mac-ip>:8080` → phone via USB tunnel. Other devices on the same WiFi can connect to the Mac's IP instead of the phone's IP. See `scripts/local-run.sh` for details.
 
 ---
 
@@ -157,7 +157,8 @@ When FTPS is enabled, the app generates a self-signed certificate stored in the 
 |--------|---------|
 | `scripts/build.sh` | Compile the debug APK. Auto-detects JDK from Homebrew or Android Studio. |
 | `scripts/install.sh` | Build + install on connected phone + configure EMUI background permissions + set up USB port forward. |
-| `scripts/relay.sh` | **Dev only.** TCP relay Mac WiFi → USB tunnel, so LAN devices reach the phone while the cable is connected. |
+| `scripts/test.sh` | Run JVM unit tests. Optionally pass a test class name as argument. |
+| `scripts/local-run.sh` | **Dev only.** TCP relay Mac WiFi → USB tunnel, so LAN devices reach the phone while the cable is connected. |
 
 ```bash
 # Build only
@@ -165,6 +166,12 @@ When FTPS is enabled, the app generates a self-signed certificate stored in the 
 
 # Build + deploy to connected phone + open browser tunnel
 ./scripts/install.sh
+
+# Run all unit tests
+./scripts/test.sh
+
+# Run a specific test class
+./scripts/test.sh AuthManagerTest
 ```
 
 ---
