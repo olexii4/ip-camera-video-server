@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# relay.sh — LOCAL DEVELOPMENT ONLY
+# local-run.sh — LOCAL DEVELOPMENT ONLY
 #
 # Problem this solves:
 #   Huawei (EMUI) blocks all incoming TCP connections on the WiFi interface by default,
@@ -23,7 +23,7 @@
 #     go to Settings → Developer options → Disable WiFi firewall restrictions
 #
 # Usage:
-#   ./scripts/relay.sh
+#   ./scripts/local-run.sh
 #   # Then open http://<mac-ip>:8080 on any device on the same WiFi
 #   # Press Ctrl+C to stop
 #
