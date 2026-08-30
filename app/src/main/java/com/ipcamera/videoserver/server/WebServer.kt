@@ -117,7 +117,7 @@ class WebServer @Inject constructor(
                         val sessions = sessionRegistry.activeSessions()
                             .map { SessionDto(it.username, it.remoteAddress, it.connectedAt) }
                         val files = archiveManager.listFiles()
-                            .map { FileDto(it.name, it.length(), it.lastModified()) }
+                            .map { FileDto(it.name, it.length(), it.lastModified(), archiveManager.isCurrentlySaving(it.name)) }
                         val msg = json.encodeToString(
                             WsStatus(running = true, sessions = sessions, files = files)
                         )
@@ -172,11 +172,14 @@ class WebServer @Inject constructor(
                     call.respondText(json.encodeToString(files), ContentType.Application.Json)
                 }
 
-                // Download a single archive file
+                // Download a single archive file — blocked while the file is still being recorded
                 get("/api/files/download/{name}") {
                     requireAuth(call) ?: return@get
                     val name = call.parameters["name"] ?: return@get call.respond(HttpStatusCode.BadRequest)
                     val file = safeArchiveFile(name) ?: return@get call.respond(HttpStatusCode.NotFound)
+                    if (archiveManager.isCurrentlySaving(name)) {
+                        return@get call.respond(HttpStatusCode.Conflict, "File is still being recorded — wait for it to finish")
+                    }
                     call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"${file.name}\"")
                     call.respondFile(file)
                 }
