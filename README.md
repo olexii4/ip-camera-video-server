@@ -2,7 +2,7 @@
 
 **Give your old phones a second life as security cameras.**
 
-Old Android phones with cracked screens, worn batteries, or outdated specs are usually thrown away — but their cameras still work perfectly. This project turns any such phone into a self-hosted IP camera with a built-in web server, using both the front and rear cameras simultaneously as separate streams.
+Old Android phones with cracked screens, worn batteries, or outdated specs are usually thrown away — but their cameras still work perfectly. This project turns any such phone into a self-hosted IP camera with a built-in web server, using both the front and rear cameras as independent streams.
 
 No cloud, no subscription, no account. The phone runs its own HTTP server. You connect to it from any browser on your network.
 
@@ -10,37 +10,43 @@ No cloud, no subscription, no account. The phone runs its own HTTP server. You c
 
 ## What it does
 
-- **Streams live video** from the front camera, rear camera, and optionally a USB OTG camera — each as an independent MJPEG stream
-- **Hosts a web UI** at `http://<phone-ip>:8080` — login, view streams, browse and download recordings, all in the browser
-- **Records continuously** in 15-minute MP4 segments to the phone's storage, with configurable size limits and automatic rotation
+- **Streams live video** from the front camera, rear camera, and optionally a USB OTG camera — each as an independent low-latency MJPEG stream (640×480, ~70ms delay)
+- **Browser-based web UI** at `http://<phone-ip>:8080` — login, start/stop individual camera streams, view live video, browse and download recordings, all without installing anything on the client
+- **Records continuously** in 15-minute MP4 segments with optional microphone audio to the phone's storage; configurable file count and total size cap (default 30 GB), automatic rotation
+- **Recording only runs while someone is watching** — no wasted storage when the camera stream is idle
+- **Live WebSocket status** — the browser page reflects server state in real time; disconnects automatically redirect to the login screen
 - **Sends an SMS** when the phone's public IP address changes, so you can always find it
-- **Serves recorded files over FTP/FTPS** for easy bulk download
+- **Serves recorded files over FTP or FTPS** for easy bulk download; FTPS uses a hardware-backed certificate from Android Keystore
+- **Single-session enforcement** — a new login revokes all other active sessions
 - **Requires no screen interaction** after setup — designed for phones with broken displays
 
 ---
 
 ## Target hardware
 
-Primary target: **Huawei P20 Lite** (Android 8.0+, dual camera).
+Primary target: **Huawei P20 Lite** (Android 8.0+, dual front/rear camera).
 
 Works on any Android 8.0+ phone. Dual-camera phones give you two independent streams; single-camera phones give you one. USB OTG support adds a third stream from a UVC webcam.
 
 ---
 
-## How to use
+## Install
+
+Download the latest APK from the [Releases page](../../releases) and install it directly on the phone, or build and deploy from source (see [Build from source](#build-from-source)).
 
 ### One-time setup on the phone
 
 1. **Enable Developer Options**: Settings → About phone → tap **Build number** 7 times
 2. **Enable USB debugging**: Settings → Developer options → USB debugging → ON
 3. Connect the phone to your Mac via USB and tap **Allow** when prompted
-4. Run the install script:
+4. Install from a release APK:
+   ```bash
+   ~/Library/Android/sdk/platform-tools/adb install ip-camera-video-server.apk
+   ```
+   Or build and install from source in one step:
    ```bash
    ./scripts/install.sh
    ```
-   This builds the APK, installs it, configures EMUI background service permissions, and opens the app.
-
-5. Press **Start** in the app, then open **http://127.0.0.1:8080** in your browser.
 
 Default credentials: `admin` / `admin` — change in **Settings → Access control**.
 
@@ -51,21 +57,57 @@ Once installed, the phone runs the server independently:
 - The server starts automatically on boot (enable in Settings)
 - Connect to `http://<phone-ip>:8080` from any browser on your network
 
-To find the phone's IP: the Status screen in the app shows the current local IP.  
-If the IP changes: the SMS notification feature texts you the new address.
+To find the phone's IP: the Status screen in the app shows the current local IP.
+If the IP changes: the SMS notification feature texts you the new address automatically.
 
 ---
 
 ## Web interface
 
-Open `http://<phone-ip>:8080` in any browser (Chrome, Firefox, Safari, mobile browsers).
+Open `http://<phone-ip>:8080` in any browser.
 
-| Tab | What it does |
-|-----|-------------|
-| **Cameras** | 350×200px tiles for each camera source. Press ▶ Play to start a stream. Click **Expand** to open a full-width panel below the grid. |
-| **Files** | List of recorded segments with file size and date. Download or delete individual files. Updated live via WebSocket. |
+### Cameras tab
 
-Sessions are exclusive: a new login revokes all other active sessions. The browser returns to the login page if the server stops or the session is revoked.
+Three camera tiles are always shown — **Main**, **Front**, and **USB**:
+- Each tile is **350×200 px** in its normal state
+- Press **▶ Play** to start streaming that camera (only one camera can be active at a time on most phones)
+- Press **■ Stop** to stop the stream
+- Click **Expand** to open a full-width panel below the grid with a larger view of the same stream; click **Compress** to close it
+- USB tile shows "No USB camera connected" when no OTG device is attached
+
+### Files tab
+
+- List of recorded segments — name, size, date — updated live via WebSocket
+- **⬇ Download** button for each file
+- **🗑 Delete** button with confirmation
+
+### Login & session management
+
+- Sessions are exclusive: a new login revokes all other active sessions immediately; the displaced browser returns to the login screen with a "Session revoked" message
+- **⏏ Logout** button in the header revokes the current session and returns to login
+
+---
+
+## App settings
+
+| Section | Setting | Default |
+|---------|---------|---------|
+| Web Server | Port | 8080 |
+| Web Server | Start on boot | Off |
+| Access control | Require login | On |
+| Access control | Username | admin |
+| Access control | Password | admin |
+| SMS notification | Target phone number | — |
+| Archive | Record main camera | Off |
+| Archive | Record front camera | Off |
+| Archive | Record microphone audio | Off |
+| Archive | Max files | 1440 |
+| Archive | Max storage | 30 GB |
+| FTP Server | FTP enabled | Off |
+| FTP Server | Use FTPS (encrypted) | Off |
+| FTP Server | Port | 2121 (plain) / 2122 (FTPS) |
+
+Changes take effect after **Stop → Start Server**.
 
 ---
 
@@ -79,52 +121,70 @@ Settings → Developer options → Disable WiFi firewall restrictions
 
 Then connect directly at `http://<phone-ip>:8080` from any device.
 
-**Option B — Mac relay (development/testing only):**
+**Option B — Mac relay (development / testing only):**
 
-With the USB cable connected and `./scripts/install.sh` already run:
-
+With the USB cable connected:
 ```bash
 ./scripts/relay.sh
 ```
-
-This relays `<mac-ip>:8080` → phone via USB tunnel. Other devices on the same WiFi can connect to the Mac's IP instead of the phone's IP.
+This relays `<mac-ip>:8080` → phone via USB tunnel. Other devices on the same WiFi can connect to the Mac's IP instead of the phone's IP. See `scripts/relay.sh` for details.
 
 ---
 
 ## FTP access to recordings
 
-Enable in **Settings → FTP Server**. Credentials are the same as the web login.
+Enable in **Settings → FTP Server**. Same credentials as the web UI.
 
-| Mode | Port | Security |
-|------|------|----------|
+| Mode | Default port | Security |
+|------|-------------|----------|
 | Plain FTP | 2121 | Unencrypted — LAN only |
 | FTPS | 2122 | TLS — encrypted |
 
-When FTPS is enabled, the app generates a self-signed certificate stored in the Android Keystore (hardware-backed). The SHA-256 fingerprint is shown in Settings — enter it in your FTP client to verify the server's identity.
+When FTPS is enabled, the app generates a self-signed certificate stored in the Android Keystore (hardware-backed, never leaves the device). The **SHA-256 fingerprint** is shown in Settings — enter it in your FTP client (FileZilla: Site Manager → Trust this certificate with fingerprint) to verify the server's identity.
 
 ---
 
-## Build scripts
+## Build from source
+
+### Requirements
+
+- macOS with Android SDK installed
+- JDK 17 or 21 (`brew install openjdk@17`)
+
+### Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/build.sh` | Compile the APK. Auto-detects JDK 17/21 from Homebrew or Android Studio. |
-| `scripts/install.sh` | Build + install on a connected phone + configure EMUI permissions + port forward. |
-| `scripts/relay.sh` | **Development only.** TCP relay from Mac WiFi → USB tunnel, so LAN devices can reach the phone server while the USB cable is connected. |
+| `scripts/build.sh` | Compile the debug APK. Auto-detects JDK from Homebrew or Android Studio. |
+| `scripts/install.sh` | Build + install on connected phone + configure EMUI background permissions + set up USB port forward. |
+| `scripts/relay.sh` | **Dev only.** TCP relay Mac WiFi → USB tunnel, so LAN devices reach the phone while the cable is connected. |
+
+```bash
+# Build only
+./scripts/build.sh
+
+# Build + deploy to connected phone + open browser tunnel
+./scripts/install.sh
+```
 
 ---
 
 ## Architecture
 
-All server logic runs in an Android `ForegroundService` so it keeps running when the screen is off or when using a phone with a broken display. The UI (if available) is a Jetpack Compose single-activity app that connects to the service.
+All server logic runs in an Android `ForegroundService` independent of the UI, so it keeps running when the screen is off or broken.
 
-- **HTTP server**: Ktor CIO, MJPEG multipart streams, JWT auth
-- **Camera**: Camera2 API, 640×480 JPEG, single buffer for low latency
-- **Archive**: MediaRecorder → MP4, 15-min segments, count + 30 GB size cap
-- **IP monitoring**: WorkManager periodic task, SmsManager
-- **Settings**: Jetpack DataStore
-- **FTP/FTPS**: hand-rolled passive-mode server, TLS via Android Keystore
-- **WebSocket**: live status + file list pushed every 2 seconds
+| Component | Technology |
+|-----------|-----------|
+| HTTP server | Ktor CIO — MJPEG multipart streams, JWT auth |
+| Camera | Camera2 API — 640×480 JPEG, single-buffer for low latency |
+| Streaming | `SharedFlow<ByteArray>` with `WhileSubscribed(200ms)` — camera closes automatically when last viewer disconnects |
+| Real-time updates | WebSocket `/ws` — status + file list pushed every 2 s |
+| Archive | MediaRecorder → MP4, 15-min segments, optional AAC audio |
+| IP monitoring | WorkManager periodic task + SmsManager |
+| Settings | Jetpack DataStore |
+| FTP/FTPS | Hand-rolled passive-mode server; TLS via Android Keystore |
+| DI | Hilt |
+| UI | Jetpack Compose + Navigation |
 
 See [`CLAUDE.md`](CLAUDE.md) for full architectural detail.
 
@@ -135,10 +195,10 @@ See [`CLAUDE.md`](CLAUDE.md) for full architectural detail.
 | Permission | Used for |
 |-----------|---------|
 | `CAMERA` | Front and rear camera access |
-| `RECORD_AUDIO` | Audio in recordings |
+| `RECORD_AUDIO` | Microphone audio in recordings |
 | `INTERNET` | HTTP server, public IP polling |
 | `ACCESS_WIFI_STATE` | Read local IP address |
 | `SEND_SMS` | IP-change notifications |
-| `FOREGROUND_SERVICE` | Keep server alive when screen is off |
+| `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_CAMERA` | Keep server alive when screen is off |
 | `WAKE_LOCK` | Prevent CPU sleep while streaming |
 | `RECEIVE_BOOT_COMPLETED` | Auto-start on device boot |
