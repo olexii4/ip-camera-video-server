@@ -104,7 +104,14 @@ class CameraServerService : LifecycleService() {
             _serverState.value = true
 
             val audioEnabled = settings.archiveAudioEnabled.first()
-            if (settings.archiveEnabled.first()) startActiveCameraArchive(audioEnabled)
+            // Migrate: if new unified setting is off but legacy per-camera setting was on, enable it
+            val archiveEnabled = settings.archiveEnabled.first().let { enabled ->
+                if (!enabled && (settings.archiveEnabledMain.first() || settings.archiveEnabledFront.first())) {
+                    settings.setArchiveEnabled(true)
+                    true
+                } else enabled
+            }
+            if (archiveEnabled) startActiveCameraArchive(audioEnabled)
             if (settings.archiveAudioOnlyEnabled.first()) startAudioOnlyArchive()
         }
     }
